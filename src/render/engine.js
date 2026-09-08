@@ -5,16 +5,20 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
-import { buildCityGroup, buildGround } from "./city.js";
+import { buildCityGroup, buildGround, pickBuildingAt } from "./city.js";
+
+function easeInOut(t) {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
 
 export class Viewport {
   constructor(container) {
     this.container = container;
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color("#05070a");
-    this.scene.fog = new THREE.FogExp2("#05070a", 0.0014);
+    this.scene.fog = new THREE.FogExp2("#05070a", 0.00115);
 
-    this.camera = new THREE.PerspectiveCamera(42, 1, 0.1, 8000);
+    this.camera = new THREE.PerspectiveCamera(38, 1, 0.1, 8000);
     this.camera.position.set(86, 92, 110);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: false });
@@ -22,7 +26,7 @@ export class Viewport {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.12;
     this.renderer.domElement.style.display = "block";
     this.renderer.domElement.style.width = "100%";
     this.renderer.domElement.style.height = "100%";
@@ -30,16 +34,19 @@ export class Viewport {
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
-    this.controls.dampingFactor = 0.06;
-    this.controls.maxPolarAngle = Math.PI * 0.49;
+    this.controls.dampingFactor = 0.07;
+    this.controls.maxPolarAngle = Math.PI * 0.495;
+    this.controls.minDistance = 8;
+    this.controls.maxDistance = 2400;
     this.controls.target.set(0, 8, 0);
+    this.controls.autoRotateSpeed = 0.55;
 
-    this.scene.add(new THREE.AmbientLight(0x7fd7e8, 0.45));
-    const key = new THREE.DirectionalLight(0x00e5ff, 1.4);
-    key.position.set(40, 80, 20);
+    this.scene.add(new THREE.AmbientLight(0x8ce8f4, 0.5));
+    const key = new THREE.DirectionalLight(0x00e5ff, 1.55);
+    key.position.set(50, 90, 28);
     this.scene.add(key);
-    const fill = new THREE.DirectionalLight(0xd4ff00, 0.25);
-    fill.position.set(-50, 30, -20);
+    const fill = new THREE.DirectionalLight(0xd4ff00, 0.28);
+    fill.position.set(-60, 40, -30);
     this.scene.add(fill);
 
     this.world = new THREE.Group();
@@ -48,10 +55,19 @@ export class Viewport {
     this.composer = null;
     this.bloomPass = null;
     this.useBloom = true;
-    this.autoRotate = false;
     this._running = true;
     this._clock = new THREE.Clock();
     this._softwareGL = this._detectSoftwareGL();
+    this._camAnim = null;
+    this._pickables = [];
+    this._hover = null;
+    this._selected = null;
+    this._onPick = null;
+    this._scan = null;
+
+    this._ndc = new THREE.Vector2();
+    this.renderer.domElement.addEventListener("pointermove", (e) => this._onPointer(e, false));
+    this.renderer.domElement.addEventListener("click", (e) => this._onPointer(e, true));
 
     this._onResize = () => this.resize();
     window.addEventListener("resize", this._onResize);
@@ -61,6 +77,18 @@ export class Viewport {
     if (!this._softwareGL) this._buildComposer();
     else this.useBloom = false;
     this._loop();
+  }
+
+  set onPick(fn) {
+    this._onPick = fn;
+  }
+
+  get autoRotate() {
+    return this.controls.autoRotate;
+  }
+
+  set autoRotate(v) {
+    this.controls.autoRotate = !!v;
   }
 
   _detectSoftwareGL() {
@@ -79,7 +107,7 @@ export class Viewport {
     this.renderer.getSize(size);
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.72, 0.42, 0.18);
+    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.85, 0.48, 0.16);
     this.composer.addPass(this.bloomPass);
     this.composer.addPass(new OutputPass());
   }
@@ -100,14 +128,22 @@ export class Viewport {
 
   setScene(reconstruction, params, style) {
     this.world.clear();
+    this._pickables = [];
+    this._hover = null;
+    this._selected = null;
+    this._scan = null;
     if (!reconstruction) return;
     this.resize();
     this.world.add(buildGround(reconstruction, params, style));
-    this.world.add(buildCityGroup(reconstruction, params, style));
+    const city = buildCityGroup(reconstruction, params, style);
+    this.world.add(city);
+    this._pickables = city.userData.pickables || [];
+    this._scan = this.world.getObjectByName("scan");
     const span = Math.max(reconstruction.width, reconstruction.height) * params.metersPerPixel;
-    this.camera.position.set(span * 0.55, span * 0.62, span * 0.7);
-    this.controls.target.set(0, span * 0.06, 0);
-    this.controls.update();
+    this.flyTo(
+      new THREE.Vector3(span * 0.58, span * 0.52, span * 0.72),
+      new THREE.Vector3(0, span * 0.07, 0),
+    );
     this.resize();
   }
 
@@ -115,20 +151,48 @@ export class Viewport {
     if (!reconstruction) return;
     const span = Math.max(reconstruction.width, reconstruction.height) * params.metersPerPixel;
     if (kind === "top") {
-      this.camera.position.set(0.01, span * 1.2, 0.01);
-      this.controls.target.set(0, 0, 0);
+      this.flyTo(new THREE.Vector3(0.02, span * 1.18, 0.02), new THREE.Vector3(0, 0, 0));
     } else if (kind === "street") {
-      this.camera.position.set(span * 0.02, span * 0.12, span * 0.58);
-      this.controls.target.set(0, span * 0.05, 0);
+      this.flyTo(new THREE.Vector3(span * 0.04, span * 0.11, span * 0.52), new THREE.Vector3(0, span * 0.06, 0));
     } else {
-      this.camera.position.set(span * 0.55, span * 0.62, span * 0.7);
-      this.controls.target.set(0, span * 0.06, 0);
+      this.flyTo(new THREE.Vector3(span * 0.58, span * 0.52, span * 0.72), new THREE.Vector3(0, span * 0.07, 0));
     }
-    this.controls.update();
+  }
+
+  flyTo(position, target, duration = 0.85) {
+    this._camAnim = {
+      t: 0,
+      duration,
+      fromPos: this.camera.position.clone(),
+      toPos: position.clone(),
+      fromTarget: this.controls.target.clone(),
+      toTarget: target.clone(),
+    };
+  }
+
+  _onPointer(event, click) {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this._ndc.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this._ndc.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    const hit = pickBuildingAt(this._pickables, this.camera, this._ndc);
+    if (this._hover && this._hover !== hit) {
+      this._hover.material.opacity = this._hover.userData.baseOpacity ?? this._hover.material.opacity;
+    }
+    this._hover = hit;
+    this.renderer.domElement.style.cursor = hit ? "pointer" : "grab";
+    if (hit) {
+      hit.userData.baseOpacity ??= hit.material.opacity;
+      if (hit !== this._selected) hit.material.opacity = Math.min(0.88, hit.userData.baseOpacity + 0.24);
+    }
+    if (click) {
+      this._selected = hit;
+      this._onPick?.(hit?.userData?.building || null);
+    }
   }
 
   screenshot() {
-    this.renderer.render(this.scene, this.camera);
+    if (this.useBloom && this.composer) this.composer.render();
+    else this.renderer.render(this.scene, this.camera);
     return this.renderer.domElement.toDataURL("image/png");
   }
 
@@ -154,8 +218,18 @@ export class Viewport {
     const tick = () => {
       if (!this._running) return;
       requestAnimationFrame(tick);
-      if (this.autoRotate) this.world.rotation.y += this._clock.getDelta() * 0.12;
-      else this._clock.getDelta();
+      const dt = this._clock.getDelta();
+      if (this._camAnim) {
+        this._camAnim.t += dt / this._camAnim.duration;
+        const k = easeInOut(Math.min(1, this._camAnim.t));
+        this.camera.position.lerpVectors(this._camAnim.fromPos, this._camAnim.toPos, k);
+        this.controls.target.lerpVectors(this._camAnim.fromTarget, this._camAnim.toTarget, k);
+        if (this._camAnim.t >= 1) this._camAnim = null;
+      }
+      if (this._scan) {
+        const maxY = this._scan.userData.maxY || 40;
+        this._scan.position.y = ((Math.sin(this._clock.elapsedTime * 0.45) + 1) / 2) * maxY;
+      }
       this.controls.update();
       if (this.useBloom && this.composer) {
         try {

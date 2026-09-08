@@ -15,10 +15,12 @@ const state = {
   groundTruth: null,
   view: "3d",
   busy: false,
+  selected: null,
 };
 
 const params = defaultParams();
 const viewport = new Viewport($("viewport"));
+let liveTimer = 0;
 
 function log(msg) {
   $("log").textContent = msg;
@@ -46,7 +48,7 @@ function readParams() {
 function setStats() {
   const rec = state.reconstruction;
   if (!rec) {
-    $("s-count").textContent = "00";
+    $("s-count").textContent = "0";
     $("s-cov").textContent = "—";
     $("s-h").textContent = "—";
     $("s-iou").textContent = "—";
@@ -62,23 +64,29 @@ function setStats() {
 
 function applyView() {
   const overlay = $("overlay-view");
-  if (state.view === "source" && state.reconstruction) {
-    overlay.classList.add("active");
-    renderOverlay($("overlay-canvas"), state.reconstruction);
-  } else {
-    overlay.classList.remove("active");
-  }
+  const stage = $("stage");
+  stage.classList.toggle("split", state.view === "split");
+  const showOverlay = (state.view === "source" || state.view === "split") && state.reconstruction;
+  overlay.classList.toggle("active", !!showOverlay);
+  if (showOverlay) renderOverlay($("overlay-canvas"), state.reconstruction, state.selected?.id ?? null);
 }
 
 function applyScene() {
   if (!state.reconstruction) return;
   $("empty").style.display = "none";
-  const style = state.style === "hybrid" ? "hybrid" : "hologram";
+  showInspect(null);
   viewport.setBloom($("bloom").checked);
   viewport.autoRotate = $("orbit").checked;
-  viewport.setScene(state.reconstruction, params, style);
+  viewport.setScene(state.reconstruction, params, state.style);
   applyView();
   setStats();
+}
+
+function setProgress(label, t, show) {
+  const el = $("progress");
+  el.hidden = !show;
+  $("progress-label").textContent = label;
+  $("progress-bar").style.width = `${Math.round((t || 0) * 100)}%`;
 }
 
 async function reconstruct() {
@@ -86,9 +94,11 @@ async function reconstruct() {
   state.busy = true;
   $("rebuild").disabled = true;
   readParams();
+  setProgress("Normalizing raster", 0.05, true);
   try {
     const rec = await reconstructFromImage(state.image, state.sourceType, params, (p) => {
       log(`${p.label} · ${Math.round(p.t * 100)}%`);
+      setProgress(p.label, p.t, true);
     });
     state.reconstruction = rec;
     log(`Locked ${rec.buildings.length} structures to source pixels`);
@@ -99,7 +109,15 @@ async function reconstruct() {
   } finally {
     state.busy = false;
     $("rebuild").disabled = false;
+    setProgress("", 1, false);
   }
+}
+
+function scheduleLive() {
+  readParams();
+  if (!$("live").checked || !state.image) return;
+  clearTimeout(liveTimer);
+  liveTimer = setTimeout(() => reconstruct(), 420);
 }
 
 function loadFile(file) {
@@ -130,6 +148,24 @@ async function loadDemo(kind) {
   await reconstruct();
 }
 
+function showInspect(building) {
+  state.selected = building;
+  const card = $("inspect");
+  if (!building) {
+    card.hidden = true;
+    applyView();
+    return;
+  }
+  card.hidden = false;
+  $("inspect-body").innerHTML = [
+    `ID ${building.id}`,
+    `${building.className}`,
+    `Height ${building.height.toFixed(1)} u`,
+    `Footprint ${Math.round(building.area)} px`,
+  ].join("<br>");
+  applyView();
+}
+
 $("source-type").addEventListener("click", (e) => {
   const btn = e.target.closest("button");
   if (!btn) return;
@@ -157,11 +193,15 @@ document.querySelectorAll(".view-switch .chip").forEach((chip) => {
     state.view = chip.dataset.view;
     document.querySelectorAll(".view-switch .chip").forEach((c) => c.classList.toggle("active", c === chip));
     applyView();
+    viewport.resize();
   });
 });
 
 ["sensitivity", "minArea", "simplify", "heightScale", "wallHeight", "metersPerPixel"].forEach((id) => {
-  $(id).addEventListener("input", readParams);
+  $(id).addEventListener("input", () => {
+    readParams();
+    scheduleLive();
+  });
 });
 ["bloom", "groundTex", "grid", "lights", "orbit"].forEach((id) => {
   $(id).addEventListener("change", () => {
@@ -182,6 +222,7 @@ for (const ev of ["dragenter", "dragover"]) {
     e.preventDefault();
     drop.classList.add("drag");
   });
+  $("stage").addEventListener(ev, (e) => e.preventDefault());
 }
 drop.addEventListener("dragleave", () => drop.classList.remove("drag"));
 drop.addEventListener("drop", (e) => {
@@ -190,10 +231,20 @@ drop.addEventListener("drop", (e) => {
   const file = e.dataTransfer?.files?.[0];
   if (file) loadFile(file);
 });
+$("stage").addEventListener("drop", (e) => {
+  e.preventDefault();
+  const file = e.dataTransfer?.files?.[0];
+  if (file) loadFile(file);
+});
 
 $("rebuild").addEventListener("click", reconstruct);
 $("demo-sat").addEventListener("click", () => loadDemo("satellite"));
 $("demo-bp").addEventListener("click", () => loadDemo("blueprint"));
+$("fullscreen").addEventListener("click", () => {
+  const el = $("stage");
+  if (!document.fullscreenElement) el.requestFullscreen?.();
+  else document.exitFullscreen?.();
+});
 
 $("exp-png").addEventListener("click", () => {
   if (!state.reconstruction) return;
@@ -210,6 +261,22 @@ $("exp-json").addEventListener("click", () => {
   downloadBlob(new Blob([JSON.stringify(json, null, 2)], { type: "application/json" }), "sector-3d.json");
 });
 
+viewport.onPick = showInspect;
+
+window.addEventListener("keydown", (e) => {
+  if (e.target.matches("input, textarea")) return;
+  if (e.key === "1") $("cam").querySelector("[data-cam=iso]")?.click();
+  if (e.key === "2") $("cam").querySelector("[data-cam=top]")?.click();
+  if (e.key === "3") $("cam").querySelector("[data-cam=street]")?.click();
+  if (e.key === "f" || e.key === "F") $("fullscreen").click();
+  if (e.key === "r" || e.key === "R") reconstruct();
+  if (e.key === " ") {
+    e.preventDefault();
+    $("orbit").checked = !$("orbit").checked;
+    viewport.autoRotate = $("orbit").checked;
+  }
+});
+
 function tickClock() {
   $("clock").textContent = new Date().toISOString().replace("T", " ").slice(0, 19) + "Z";
 }
@@ -218,5 +285,6 @@ setInterval(tickClock, 1000);
 readParams();
 
 window.addEventListener("load", () => {
-  setTimeout(() => $("boot").classList.add("hide"), 900);
+  setTimeout(() => $("boot").classList.add("hide"), 700);
+  loadDemo("satellite");
 });

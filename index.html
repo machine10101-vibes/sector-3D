@@ -75,9 +75,19 @@
           <div class="view-switch">
             <button class="chip active" data-view="3d" type="button">3D hologram</button>
             <button class="chip" data-view="source" type="button">Source lock</button>
+            <button class="chip" data-view="split" type="button">Split</button>
           </div>
+          <button class="chip fs" id="fullscreen" type="button">Fullscreen</button>
           <div id="viewport"></div>
           <div id="overlay-view"><canvas id="overlay-canvas"></canvas></div>
+          <aside class="inspect" id="inspect" hidden>
+            <h3>Structure</h3>
+            <p id="inspect-body">Click a volume to inspect.</p>
+          </aside>
+          <div class="progress" id="progress" hidden>
+            <span id="progress-label">Reconstructing</span>
+            <i><b id="progress-bar"></b></i>
+          </div>
           <div class="scanlines"></div>
           <div class="hud-corners">
             <span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span>
@@ -107,6 +117,7 @@
             <label class="toggle">Grid<input id="grid" type="checkbox" checked /></label>
             <label class="toggle">Activity nodes<input id="lights" type="checkbox" checked /></label>
             <label class="toggle">Auto orbit<input id="orbit" type="checkbox" /></label>
+            <label class="toggle">Live rebuild<input id="live" type="checkbox" checked /></label>
           </div>
           <div class="segmented cam-switch" id="cam">
             <button type="button" data-cam="iso" class="active">Iso</button>
@@ -124,7 +135,7 @@
 
       <footer class="statusbar">
         <div id="status-left">SECTOR IDLE</div>
-        <div>Footprints remain registered to source pixels · heights from shadow + mass</div>
+        <div>Drag to orbit · click a volume to inspect · 1 Iso · 2 Nadir · 3 Street · F fullscreen</div>
         <div id="clock"></div>
       </footer>
     </div>
