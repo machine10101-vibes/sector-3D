@@ -7,7 +7,7 @@ import { buildingsToJson, downloadBlob, downloadDataUrl, renderOverlay } from ".
 const $ = (id) => document.getElementById(id);
 
 const state = {
-  sourceType: "satellite",
+  sourceType: "auto",
   style: "hologram",
   image: null,
   imageName: null,
@@ -101,7 +101,7 @@ async function reconstruct() {
       setProgress(p.label, p.t, true);
     });
     state.reconstruction = rec;
-    log(`Locked ${rec.buildings.length} structures to source pixels`);
+    log(`Locked ${rec.buildings.length} structures · ${rec.sourceType} mode`);
     applyScene();
   } catch (err) {
     console.error(err);
@@ -127,6 +127,10 @@ function loadFile(file) {
     state.image = img;
     state.imageName = file.name;
     state.groundTruth = null;
+    state.sourceType = "auto";
+    document.querySelectorAll("#source-type button").forEach((b) => {
+      b.classList.toggle("active", b.dataset.type === "auto");
+    });
     log(`Loaded ${file.name} · ${img.width}×${img.height}`);
     reconstruct();
   };

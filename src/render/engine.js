@@ -140,8 +140,10 @@ export class Viewport {
     this._scan = null;
     if (!reconstruction) return;
     this.resize();
-    this.world.add(buildGround(reconstruction, params, style));
-    const city = buildCityGroup(reconstruction, params, style);
+    const ground = buildGround(reconstruction, params, style);
+    this.world.add(ground);
+    const roofTex = ground.children.find((c) => c.material?.map)?.material?.map;
+    const city = buildCityGroup(reconstruction, params, style, roofTex);
     this.world.add(city);
     this._pickables = city.userData.pickables || [];
     this._scan = this.world.getObjectByName("scan");

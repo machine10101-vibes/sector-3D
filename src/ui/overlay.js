@@ -15,11 +15,11 @@ export function renderOverlay(canvas, reconstruction, highlightId = null) {
     ctx.beginPath();
     b.polygon.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
     ctx.closePath();
-    ctx.fillStyle = lime ? "rgba(212,255,0,0.22)" : "rgba(0,229,255,0.18)";
-    if (active) ctx.fillStyle = "rgba(255,179,0,0.35)";
+    ctx.fillStyle = lime ? "rgba(212,255,0,0.28)" : "rgba(0,229,255,0.24)";
+    if (active) ctx.fillStyle = "rgba(255,179,0,0.4)";
     ctx.fill();
     ctx.strokeStyle = active ? "#ffb300" : lime ? "#d4ff00" : "#00e5ff";
-    ctx.lineWidth = active ? 2.4 : 1.35;
+    ctx.lineWidth = active ? 3 : 2;
     ctx.shadowColor = ctx.strokeStyle;
     ctx.shadowBlur = 8;
     ctx.stroke();
