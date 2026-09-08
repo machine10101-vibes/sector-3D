@@ -1,13 +1,13 @@
 import { drawImageContain } from "./filters.js";
-import { segmentSatellite } from "./satellite.js";
+import { inferSourceType, segmentSatellite } from "./satellite.js";
 import { segmentBlueprint } from "./blueprint.js";
 import { meanIoU } from "./geometry.js";
 
 export function defaultParams() {
   return {
-    sensitivity: 0.62,
-    minArea: 90,
-    simplify: 2.2,
+    sensitivity: 0.68,
+    minArea: 70,
+    simplify: 1.8,
     heightScale: 1,
     wallHeight: 14,
     sunFactor: 0.85,
@@ -15,25 +15,28 @@ export function defaultParams() {
   };
 }
 
+export { inferSourceType };
+
 export async function reconstructFromImage(image, sourceType, params, onProgress) {
   const report = (label, t) => onProgress?.({ label, t });
   report("Normalizing raster", 0.08);
   await Promise.resolve();
   const raster = drawImageContain(image, 1280);
-  report(sourceType === "blueprint" ? "Tracing enclosed masses" : "Segmenting structures", 0.35);
+  const mode = sourceType === "auto" ? inferSourceType(raster.imageData) : sourceType;
+  report(mode === "blueprint" ? "Tracing enclosed masses" : "Locking roofs to source pixels", 0.35);
   await Promise.resolve();
 
   const segmented =
-    sourceType === "blueprint"
+    mode === "blueprint"
       ? segmentBlueprint(raster.imageData, params)
       : segmentSatellite(raster.imageData, params);
 
-  report("Fitting footprints", 0.78);
+  report("Extruding footprints", 0.78);
   const buildings = segmented.buildings.sort((a, b) => b.height - a.height);
   const coverage =
     buildings.reduce((s, b) => s + b.area, 0) / Math.max(1, raster.width * raster.height);
 
-  report("Locked to source pixels", 1);
+  report(`Locked ${buildings.length} structures to source pixels`, 1);
   return {
     width: raster.width,
     height: raster.height,
@@ -44,7 +47,7 @@ export async function reconstructFromImage(image, sourceType, params, onProgress
     lights: segmented.lights,
     mask: segmented.mask,
     coverage,
-    sourceType,
+    sourceType: mode,
   };
 }
 
