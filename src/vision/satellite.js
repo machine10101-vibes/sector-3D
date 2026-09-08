@@ -88,9 +88,9 @@ export function segmentSatellite(imageData, params) {
     const area = Math.abs(polygonArea(ring)) || c.area;
     const roof = samplePatch(imageData, c.centroid.x, c.centroid.y, 4);
     const shadowLen = estimateShadowLength(luma, shadow, width, height, c, mean);
-    const sizeHeight = Math.pow(area, 0.38) * 0.55;
-    const shadowHeight = shadowLen * params.sunFactor;
-    const extrusion = Math.max(4, (sizeHeight + shadowHeight) * params.heightScale);
+    const sizeHeight = Math.pow(Math.max(area, 1), 0.42) * 0.48;
+    const shadowHeight = Math.min(36, shadowLen * params.sunFactor * 0.32);
+    const extrusion = Math.max(5, (sizeHeight + shadowHeight) * params.heightScale);
     const cls = extrusion > 28 ? "highrise" : extrusion > 14 ? "mid" : "lowrise";
     return {
       id: c.id,
