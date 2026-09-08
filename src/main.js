@@ -158,10 +158,10 @@ function showInspect(building) {
   }
   card.hidden = false;
   $("inspect-body").innerHTML = [
-    `ID ${building.id}`,
-    `${building.className}`,
-    `Height ${building.height.toFixed(1)} u`,
-    `Footprint ${Math.round(building.area)} px`,
+    `<span>ID</span> ${building.id}`,
+    `<span>Class</span> ${building.className}`,
+    `<span>Height</span> ${building.height.toFixed(1)} u`,
+    `<span>Area</span> ${Math.round(building.area)} px`,
   ].join("<br>");
   applyView();
 }

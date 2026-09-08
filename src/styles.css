@@ -308,13 +308,7 @@ input[type="range"] {
   letter-spacing: 0.18em;
   color: var(--amber);
 }
-.inspect p {
-  margin: 0;
-  font-family: var(--font-data);
-  font-size: 11px;
-  color: var(--text);
-  line-height: 1.45;
-}
+.inspect p span { color: var(--muted); margin-right: 8px; }
 
 .progress {
   position: absolute;
