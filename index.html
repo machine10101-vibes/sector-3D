@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SECTOR-3D — Exterior Cartography</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="boot" id="boot">
+      <div class="logo">SECTOR-3D</div>
+      <div class="bar"><i></i></div>
+      <p class="tag" style="margin-top: 16px">Initializing exterior cartography engine</p>
+    </div>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="logo">SECTOR-3D</div>
+          <div class="tag">Exterior 3D cartography engine</div>
+        </div>
+        <div class="sys"><span class="pulse"></span> SYS ONLINE · PIXEL-LOCKED EXTRUSION</div>
+      </header>
+
+      <main class="workspace">
+        <aside class="panel" id="source-panel">
+          <h2>Source raster</h2>
+          <div class="segmented" id="source-type">
+            <button type="button" data-type="satellite" class="active">Satellite</button>
+            <button type="button" data-type="blueprint">Blueprint</button>
+          </div>
+          <label class="drop" id="drop">
+            <strong>Drop imagery</strong>
+            nadir satellite, aerial, or floor plan
+            <input id="file" type="file" accept="image/*" />
+          </label>
+          <div class="demos" style="margin-top: 12px">
+            <button class="btn ghost" id="demo-sat" type="button">Load Harbor District</button>
+            <button class="btn ghost" id="demo-bp" type="button">Load Civic Floor Plan</button>
+          </div>
+          <div class="field">
+            <label>Sensitivity <span id="v-sens">0.62</span></label>
+            <input id="sensitivity" type="range" min="0.25" max="0.95" step="0.01" value="0.62" />
+          </div>
+          <div class="field">
+            <label>Min footprint px <span id="v-area">90</span></label>
+            <input id="minArea" type="range" min="24" max="400" step="2" value="90" />
+          </div>
+          <div class="field">
+            <label>Simplify <span id="v-simp">2.2</span></label>
+            <input id="simplify" type="range" min="0.6" max="8" step="0.1" value="2.2" />
+          </div>
+          <div class="field">
+            <label>Height scale <span id="v-h">1.00</span></label>
+            <input id="heightScale" type="range" min="0.35" max="2.5" step="0.05" value="1" />
+          </div>
+          <div class="field" id="wall-field">
+            <label>Blueprint wall height <span id="v-wall">14</span></label>
+            <input id="wallHeight" type="range" min="3" max="40" step="1" value="14" />
+          </div>
+          <div class="field">
+            <label>Meters / pixel <span id="v-mpp">0.55</span></label>
+            <input id="metersPerPixel" type="range" min="0.15" max="2" step="0.05" value="0.55" />
+          </div>
+          <button class="btn primary" id="rebuild" type="button">Reconstruct sector</button>
+          <div class="log" id="log">Awaiting source raster.</div>
+        </aside>
+
+        <section class="viewport-wrap" id="stage">
+          <div class="view-switch">
+            <button class="chip active" data-view="3d" type="button">3D hologram</button>
+            <button class="chip" data-view="source" type="button">Source lock</button>
+          </div>
+          <div id="viewport"></div>
+          <div id="overlay-view"><canvas id="overlay-canvas"></canvas></div>
+          <div class="scanlines"></div>
+          <div class="hud-corners">
+            <span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span>
+          </div>
+          <div class="empty-hint" id="empty">
+            <h3>NO SECTOR LOADED</h3>
+            <p>Provide satellite imagery or a blueprint, or load a calibration district to reconstruct a pixel-locked exterior map.</p>
+          </div>
+        </section>
+
+        <aside class="panel">
+          <h2>Reconstruction</h2>
+          <div class="stat-grid">
+            <div class="stat"><em>Structures</em><strong id="s-count">00</strong></div>
+            <div class="stat"><em>Coverage</em><strong id="s-cov">—</strong></div>
+            <div class="stat"><em>Mean height</em><strong id="s-h">—</strong></div>
+            <div class="stat"><em>Fidelity IoU</em><strong id="s-iou">—</strong></div>
+          </div>
+          <h2>Presentation</h2>
+          <div class="segmented" id="style">
+            <button type="button" data-style="hologram" class="active">Hologram</button>
+            <button type="button" data-style="hybrid">Hybrid</button>
+          </div>
+          <div class="toggles">
+            <label class="toggle">Bloom<input id="bloom" type="checkbox" checked /></label>
+            <label class="toggle">Ground texture<input id="groundTex" type="checkbox" checked /></label>
+            <label class="toggle">Grid<input id="grid" type="checkbox" checked /></label>
+            <label class="toggle">Activity nodes<input id="lights" type="checkbox" checked /></label>
+            <label class="toggle">Auto orbit<input id="orbit" type="checkbox" /></label>
+          </div>
+          <div class="segmented" style="margin-bottom: 12px" id="cam">
+            <button type="button" data-cam="iso" class="active">Iso</button>
+            <button type="button" data-cam="top">Nadir</button>
+            <button type="button" data-cam="street">Street</button>
+          </div>
+          <h2>Export</h2>
+          <div class="exports">
+            <button class="btn ghost" id="exp-png" type="button">Capture PNG</button>
+            <button class="btn ghost" id="exp-glb" type="button">Export GLB</button>
+            <button class="btn ghost" id="exp-json" type="button">Footprint JSON</button>
+          </div>
+        </aside>
+      </main>
+
+      <footer class="statusbar">
+        <div id="status-left">SECTOR IDLE</div>
+        <div>Footprints remain registered to source pixels · heights from shadow + mass</div>
+        <div id="clock"></div>
+      </footer>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
