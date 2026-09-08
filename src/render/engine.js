@@ -108,16 +108,17 @@ export class Viewport {
     this.camera.position.set(span * 0.55, span * 0.62, span * 0.7);
     this.controls.target.set(0, span * 0.06, 0);
     this.controls.update();
+    this.resize();
   }
 
   setView(kind, reconstruction, params) {
     if (!reconstruction) return;
     const span = Math.max(reconstruction.width, reconstruction.height) * params.metersPerPixel;
     if (kind === "top") {
-      this.camera.position.set(0, span * 1.15, 0.01);
+      this.camera.position.set(0.01, span * 1.2, 0.01);
       this.controls.target.set(0, 0, 0);
     } else if (kind === "street") {
-      this.camera.position.set(span * 0.02, span * 0.08, span * 0.55);
+      this.camera.position.set(span * 0.02, span * 0.12, span * 0.58);
       this.controls.target.set(0, span * 0.05, 0);
     } else {
       this.camera.position.set(span * 0.55, span * 0.62, span * 0.7);

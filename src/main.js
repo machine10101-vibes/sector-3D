@@ -52,7 +52,7 @@ function setStats() {
     $("s-iou").textContent = "—";
     return;
   }
-  $("s-count").textContent = String(rec.buildings.length).padStart(2, "0");
+  $("s-count").textContent = String(rec.buildings.length);
   $("s-cov").textContent = `${Math.round(rec.coverage * 100)}%`;
   const meanH = rec.buildings.reduce((s, b) => s + b.height, 0) / Math.max(1, rec.buildings.length);
   $("s-h").textContent = `${meanH.toFixed(1)} u`;

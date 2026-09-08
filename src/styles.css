@@ -341,7 +341,10 @@ input[type="range"] {
 }
 .toggle input { accent-color: var(--cyan); }
 
-.exports { display: grid; gap: 8px; }
+.cam-switch {
+  grid-template-columns: 1fr 1fr 1fr;
+  margin-bottom: 12px;
+}
 
 .statusbar {
   display: flex;
