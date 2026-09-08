@@ -12,22 +12,26 @@ export class Viewport {
     this.container = container;
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color("#05070a");
-    this.scene.fog = new THREE.FogExp2("#05070a", 0.006);
+    this.scene.fog = new THREE.FogExp2("#05070a", 0.0014);
 
-    this.camera = new THREE.PerspectiveCamera(42, 1, 0.1, 4000);
+    this.camera = new THREE.PerspectiveCamera(42, 1, 0.1, 8000);
     this.camera.position.set(86, 92, 110);
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: true });
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: false });
+    this.renderer.setClearColor("#05070a", 1);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
+    this.renderer.domElement.style.display = "block";
+    this.renderer.domElement.style.width = "100%";
+    this.renderer.domElement.style.height = "100%";
     container.appendChild(this.renderer.domElement);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.06;
-    this.controls.maxPolarAngle = Math.PI * 0.48;
+    this.controls.maxPolarAngle = Math.PI * 0.49;
     this.controls.target.set(0, 8, 0);
 
     this.scene.add(new THREE.AmbientLight(0x7fd7e8, 0.45));
@@ -47,12 +51,27 @@ export class Viewport {
     this.autoRotate = false;
     this._running = true;
     this._clock = new THREE.Clock();
+    this._softwareGL = this._detectSoftwareGL();
 
     this._onResize = () => this.resize();
     window.addEventListener("resize", this._onResize);
+    this._ro = new ResizeObserver(() => this.resize());
+    this._ro.observe(container);
     this.resize();
-    this._buildComposer();
+    if (!this._softwareGL) this._buildComposer();
+    else this.useBloom = false;
     this._loop();
+  }
+
+  _detectSoftwareGL() {
+    try {
+      const gl = this.renderer.getContext();
+      const info = gl.getExtension("WEBGL_debug_renderer_info");
+      const name = info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : "";
+      return /llvmpipe|swiftshader|softpipe|microsoft basic/i.test(name);
+    } catch {
+      return false;
+    }
   }
 
   _buildComposer() {
@@ -75,13 +94,14 @@ export class Viewport {
   }
 
   setBloom(on) {
-    this.useBloom = on;
-    if (this.bloomPass) this.bloomPass.enabled = on;
+    this.useBloom = on && !this._softwareGL && !!this.composer;
+    if (this.bloomPass) this.bloomPass.enabled = this.useBloom;
   }
 
   setScene(reconstruction, params, style) {
     this.world.clear();
     if (!reconstruction) return;
+    this.resize();
     this.world.add(buildGround(reconstruction, params, style));
     this.world.add(buildCityGroup(reconstruction, params, style));
     const span = Math.max(reconstruction.width, reconstruction.height) * params.metersPerPixel;
@@ -136,14 +156,21 @@ export class Viewport {
       if (this.autoRotate) this.world.rotation.y += this._clock.getDelta() * 0.12;
       else this._clock.getDelta();
       this.controls.update();
-      if (this.useBloom && this.composer) this.composer.render();
-      else this.renderer.render(this.scene, this.camera);
+      if (this.useBloom && this.composer) {
+        try {
+          this.composer.render();
+        } catch {
+          this.useBloom = false;
+          this.renderer.render(this.scene, this.camera);
+        }
+      } else this.renderer.render(this.scene, this.camera);
     };
     tick();
   }
 
   dispose() {
     this._running = false;
+    this._ro?.disconnect();
     window.removeEventListener("resize", this._onResize);
     this.renderer.dispose();
   }

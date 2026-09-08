@@ -76,7 +76,7 @@ function addTriangulatedBuilding(group, building, width, height, metersPerPixel,
   const meshMat = new THREE.MeshBasicMaterial({
     vertexColors: true,
     transparent: true,
-    opacity: style === "hologram" ? 0.22 : 0.62,
+    opacity: style === "hologram" ? 0.32 : 0.7,
     side: THREE.DoubleSide,
     depthWrite: style !== "hologram",
   });
