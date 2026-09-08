@@ -1,0 +1,20 @@
+{
+  "name": "sector-3d",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Exterior 3D cartography engine — reconstruct hologram city maps from satellite imagery and blueprints.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --host --port 4173",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "vite": "^6.2.0",
+    "vitest": "^3.0.5"
+  }
+}

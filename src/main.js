@@ -1,0 +1,222 @@
+import "./styles.css";
+import { Viewport } from "./render/engine.js";
+import { defaultParams, reconstructFromImage, fidelityAgainst } from "./vision/reconstruct.js";
+import { generateFloorPlan, generateHarborDistrict, canvasToImage } from "./samples/demo.js";
+import { buildingsToJson, downloadBlob, downloadDataUrl, renderOverlay } from "./ui/overlay.js";
+
+const $ = (id) => document.getElementById(id);
+
+const state = {
+  sourceType: "satellite",
+  style: "hologram",
+  image: null,
+  imageName: null,
+  reconstruction: null,
+  groundTruth: null,
+  view: "3d",
+  busy: false,
+};
+
+const params = defaultParams();
+const viewport = new Viewport($("viewport"));
+
+function log(msg) {
+  $("log").textContent = msg;
+  $("status-left").textContent = msg.toUpperCase();
+}
+
+function readParams() {
+  params.sensitivity = Number($("sensitivity").value);
+  params.minArea = Number($("minArea").value);
+  params.simplify = Number($("simplify").value);
+  params.heightScale = Number($("heightScale").value);
+  params.wallHeight = Number($("wallHeight").value);
+  params.metersPerPixel = Number($("metersPerPixel").value);
+  params.showGroundTexture = $("groundTex").checked;
+  params.showGrid = $("grid").checked;
+  params.showLights = $("lights").checked;
+  $("v-sens").textContent = params.sensitivity.toFixed(2);
+  $("v-area").textContent = String(params.minArea);
+  $("v-simp").textContent = params.simplify.toFixed(1);
+  $("v-h").textContent = params.heightScale.toFixed(2);
+  $("v-wall").textContent = String(params.wallHeight);
+  $("v-mpp").textContent = params.metersPerPixel.toFixed(2);
+}
+
+function setStats() {
+  const rec = state.reconstruction;
+  if (!rec) {
+    $("s-count").textContent = "00";
+    $("s-cov").textContent = "—";
+    $("s-h").textContent = "—";
+    $("s-iou").textContent = "—";
+    return;
+  }
+  $("s-count").textContent = String(rec.buildings.length);
+  $("s-cov").textContent = `${Math.round(rec.coverage * 100)}%`;
+  const meanH = rec.buildings.reduce((s, b) => s + b.height, 0) / Math.max(1, rec.buildings.length);
+  $("s-h").textContent = `${meanH.toFixed(1)} u`;
+  const fid = fidelityAgainst(rec, state.groundTruth);
+  $("s-iou").textContent = fid ? `${Math.round(fid.meanIoU * 100)}%` : "src";
+}
+
+function applyView() {
+  const overlay = $("overlay-view");
+  if (state.view === "source" && state.reconstruction) {
+    overlay.classList.add("active");
+    renderOverlay($("overlay-canvas"), state.reconstruction);
+  } else {
+    overlay.classList.remove("active");
+  }
+}
+
+function applyScene() {
+  if (!state.reconstruction) return;
+  $("empty").style.display = "none";
+  const style = state.style === "hybrid" ? "hybrid" : "hologram";
+  viewport.setBloom($("bloom").checked);
+  viewport.autoRotate = $("orbit").checked;
+  viewport.setScene(state.reconstruction, params, style);
+  applyView();
+  setStats();
+}
+
+async function reconstruct() {
+  if (!state.image || state.busy) return;
+  state.busy = true;
+  $("rebuild").disabled = true;
+  readParams();
+  try {
+    const rec = await reconstructFromImage(state.image, state.sourceType, params, (p) => {
+      log(`${p.label} · ${Math.round(p.t * 100)}%`);
+    });
+    state.reconstruction = rec;
+    log(`Locked ${rec.buildings.length} structures to source pixels`);
+    applyScene();
+  } catch (err) {
+    console.error(err);
+    log(`Reconstruction failed: ${err.message || err}`);
+  } finally {
+    state.busy = false;
+    $("rebuild").disabled = false;
+  }
+}
+
+function loadFile(file) {
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    state.image = img;
+    state.imageName = file.name;
+    state.groundTruth = null;
+    log(`Loaded ${file.name} · ${img.width}×${img.height}`);
+    reconstruct();
+  };
+  img.onerror = () => log("Unable to decode raster");
+  img.src = url;
+}
+
+async function loadDemo(kind) {
+  const demo = kind === "blueprint" ? generateFloorPlan() : generateHarborDistrict();
+  state.sourceType = demo.sourceType;
+  document.querySelectorAll("#source-type button").forEach((b) => {
+    b.classList.toggle("active", b.dataset.type === demo.sourceType);
+  });
+  const img = await canvasToImage(demo.canvas);
+  state.image = img;
+  state.imageName = demo.name;
+  state.groundTruth = demo.groundTruth;
+  log(`Calibration raster · ${demo.name}`);
+  await reconstruct();
+}
+
+$("source-type").addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  state.sourceType = btn.dataset.type;
+  document.querySelectorAll("#source-type button").forEach((b) => b.classList.toggle("active", b === btn));
+});
+
+$("style").addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  state.style = btn.dataset.style;
+  document.querySelectorAll("#style button").forEach((b) => b.classList.toggle("active", b === btn));
+  applyScene();
+});
+
+$("cam").addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn || !state.reconstruction) return;
+  document.querySelectorAll("#cam button").forEach((b) => b.classList.toggle("active", b === btn));
+  viewport.setView(btn.dataset.cam === "iso" ? "iso" : btn.dataset.cam, state.reconstruction, params);
+});
+
+document.querySelectorAll(".view-switch .chip").forEach((chip) => {
+  chip.addEventListener("click", () => {
+    state.view = chip.dataset.view;
+    document.querySelectorAll(".view-switch .chip").forEach((c) => c.classList.toggle("active", c === chip));
+    applyView();
+  });
+});
+
+["sensitivity", "minArea", "simplify", "heightScale", "wallHeight", "metersPerPixel"].forEach((id) => {
+  $(id).addEventListener("input", readParams);
+});
+["bloom", "groundTex", "grid", "lights", "orbit"].forEach((id) => {
+  $(id).addEventListener("change", () => {
+    readParams();
+    if (id === "orbit") viewport.autoRotate = $("orbit").checked;
+    else if (id === "bloom") viewport.setBloom($("bloom").checked);
+    else applyScene();
+  });
+});
+
+const drop = $("drop");
+$("file").addEventListener("change", (e) => {
+  const file = e.target.files?.[0];
+  if (file) loadFile(file);
+});
+for (const ev of ["dragenter", "dragover"]) {
+  drop.addEventListener(ev, (e) => {
+    e.preventDefault();
+    drop.classList.add("drag");
+  });
+}
+drop.addEventListener("dragleave", () => drop.classList.remove("drag"));
+drop.addEventListener("drop", (e) => {
+  e.preventDefault();
+  drop.classList.remove("drag");
+  const file = e.dataTransfer?.files?.[0];
+  if (file) loadFile(file);
+});
+
+$("rebuild").addEventListener("click", reconstruct);
+$("demo-sat").addEventListener("click", () => loadDemo("satellite"));
+$("demo-bp").addEventListener("click", () => loadDemo("blueprint"));
+
+$("exp-png").addEventListener("click", () => {
+  if (!state.reconstruction) return;
+  downloadDataUrl(viewport.screenshot(), "sector-3d.png");
+});
+$("exp-glb").addEventListener("click", async () => {
+  if (!state.reconstruction) return;
+  const blob = await viewport.exportGltf();
+  downloadBlob(blob, "sector-3d.glb");
+});
+$("exp-json").addEventListener("click", () => {
+  if (!state.reconstruction) return;
+  const json = buildingsToJson(state.reconstruction, params, { name: state.imageName, type: state.sourceType });
+  downloadBlob(new Blob([JSON.stringify(json, null, 2)], { type: "application/json" }), "sector-3d.json");
+});
+
+function tickClock() {
+  $("clock").textContent = new Date().toISOString().replace("T", " ").slice(0, 19) + "Z";
+}
+tickClock();
+setInterval(tickClock, 1000);
+readParams();
+
+window.addEventListener("load", () => {
+  setTimeout(() => $("boot").classList.add("hide"), 900);
+});
