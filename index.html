@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
     <title>SECTOR-3D — Exterior Cartography</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -24,12 +24,19 @@
           <div class="logo">SECTOR-3D</div>
           <div class="tag">Exterior 3D cartography engine</div>
         </div>
-        <div class="sys"><span class="pulse"></span> SYS ONLINE · PIXEL-LOCKED EXTRUSION</div>
+        <div class="top-actions">
+          <button class="nav-btn" id="open-source" type="button">Source</button>
+          <button class="nav-btn" id="open-recon" type="button">Stats</button>
+          <div class="sys"><span class="pulse"></span> <span class="sys-copy">SYS ONLINE · PIXEL-LOCKED EXTRUSION</span></div>
+        </div>
       </header>
 
       <main class="workspace">
-        <aside class="panel" id="source-panel">
-          <h2>Source raster</h2>
+        <aside class="panel drawer drawer-left" id="source-panel">
+          <div class="panel-head">
+            <h2>Source raster</h2>
+            <button class="drawer-close" type="button" data-close="source-panel" aria-label="Close source">Close</button>
+          </div>
           <div class="segmented" id="source-type">
             <button type="button" data-type="satellite" class="active">Satellite</button>
             <button type="button" data-type="blueprint">Blueprint</button>
@@ -73,11 +80,11 @@
 
         <section class="viewport-wrap" id="stage">
           <div class="view-switch">
-            <button class="chip active" data-view="3d" type="button">3D hologram</button>
-            <button class="chip" data-view="source" type="button">Source lock</button>
+            <button class="chip active" data-view="3d" type="button"><span class="full">3D hologram</span><span class="short">3D</span></button>
+            <button class="chip" data-view="source" type="button"><span class="full">Source lock</span><span class="short">Lock</span></button>
             <button class="chip" data-view="split" type="button">Split</button>
           </div>
-          <button class="chip fs" id="fullscreen" type="button">Fullscreen</button>
+          <button class="chip fs" id="fullscreen" type="button"><span class="full">Fullscreen</span><span class="short">Full</span></button>
           <div id="viewport"></div>
           <div id="overlay-view"><canvas id="overlay-canvas"></canvas></div>
           <aside class="inspect" id="inspect" hidden>
@@ -98,8 +105,11 @@
           </div>
         </section>
 
-        <aside class="panel">
-          <h2>Reconstruction</h2>
+        <aside class="panel drawer drawer-right" id="recon-panel">
+          <div class="panel-head">
+            <h2>Reconstruction</h2>
+            <button class="drawer-close" type="button" data-close="recon-panel" aria-label="Close stats">Close</button>
+          </div>
           <div class="stat-grid">
             <div class="stat"><em>Structures</em><strong id="s-count">00</strong></div>
             <div class="stat"><em>Coverage</em><strong id="s-cov">—</strong></div>
@@ -135,10 +145,11 @@
 
       <footer class="statusbar">
         <div id="status-left">SECTOR IDLE</div>
-        <div>Drag to orbit · click a volume to inspect · 1 Iso · 2 Nadir · 3 Street · F fullscreen</div>
+        <div class="status-hints">Drag to orbit · click a volume to inspect · 1 Iso · 2 Nadir · 3 Street · F fullscreen</div>
         <div id="clock"></div>
       </footer>
     </div>
+    <div class="backdrop" id="backdrop" hidden></div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

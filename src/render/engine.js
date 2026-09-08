@@ -40,6 +40,12 @@ export class Viewport {
     this.controls.maxDistance = 2400;
     this.controls.target.set(0, 8, 0);
     this.controls.autoRotateSpeed = 0.55;
+    if (window.matchMedia("(pointer: coarse)").matches) {
+      this.controls.rotateSpeed = 0.68;
+      this.controls.zoomSpeed = 0.85;
+      this.controls.touches.ONE = THREE.TOUCH.ROTATE;
+      this.controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
+    }
 
     this.scene.add(new THREE.AmbientLight(0x8ce8f4, 0.5));
     const key = new THREE.DirectionalLight(0x00e5ff, 1.55);

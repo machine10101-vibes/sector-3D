@@ -263,8 +263,35 @@ $("exp-json").addEventListener("click", () => {
 
 viewport.onPick = showInspect;
 
+function closeDrawers() {
+  $("source-panel").classList.remove("open");
+  $("recon-panel").classList.remove("open");
+  $("backdrop").hidden = true;
+  $("open-source").setAttribute("aria-expanded", "false");
+  $("open-recon").setAttribute("aria-expanded", "false");
+  requestAnimationFrame(() => viewport.resize());
+}
+
+function toggleDrawer(id) {
+  const el = $(id);
+  const willOpen = !el.classList.contains("open");
+  closeDrawers();
+  if (!willOpen) return;
+  el.classList.add("open");
+  $("backdrop").hidden = false;
+  $(id === "source-panel" ? "open-source" : "open-recon").setAttribute("aria-expanded", "true");
+}
+
+$("open-source").addEventListener("click", () => toggleDrawer("source-panel"));
+$("open-recon").addEventListener("click", () => toggleDrawer("recon-panel"));
+$("backdrop").addEventListener("click", closeDrawers);
+document.querySelectorAll("[data-close]").forEach((btn) => {
+  btn.addEventListener("click", closeDrawers);
+});
+
 window.addEventListener("keydown", (e) => {
   if (e.target.matches("input, textarea")) return;
+  if (e.key === "Escape") closeDrawers();
   if (e.key === "1") $("cam").querySelector("[data-cam=iso]")?.click();
   if (e.key === "2") $("cam").querySelector("[data-cam=top]")?.click();
   if (e.key === "3") $("cam").querySelector("[data-cam=street]")?.click();
