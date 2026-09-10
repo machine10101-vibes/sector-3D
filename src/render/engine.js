@@ -15,8 +15,8 @@ export class Viewport {
   constructor(container) {
     this.container = container;
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color("#9aa8b8");
-    this.scene.fog = new THREE.Fog("#9aa8b8", 1800, 5200);
+    this.scene.background = new THREE.Color("#b8c6d4");
+    this.scene.fog = new THREE.FogExp2("#c3d0dc", 0.0002);
 
     this.persp = new THREE.PerspectiveCamera(42, 1, 0.1, 8000);
     this.persp.position.set(86, 92, 110);
@@ -24,7 +24,7 @@ export class Viewport {
     this.camera = this.persp;
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: false });
-    this.renderer.setClearColor("#9aa8b8", 1);
+    this.renderer.setClearColor("#b8c6d4", 1);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.NoToneMapping;
@@ -51,22 +51,28 @@ export class Viewport {
       this.controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
     }
 
-    this.scene.add(new THREE.HemisphereLight(0xd7e4f2, 0x4a463c, 1.15));
-    this._sun = new THREE.DirectionalLight(0xfff2d8, 1.85);
+    this.scene.add(new THREE.HemisphereLight(0xdbe7f4, 0x5a5346, 1.05));
+    this._sun = new THREE.DirectionalLight(0xfff1d6, 1.7);
     this._sun.position.set(-80, 140, -60);
     this._sun.castShadow = true;
     this._sun.shadow.mapSize.set(2048, 2048);
-    this._sun.shadow.bias = -0.0007;
-    this._sun.shadow.normalBias = 0.045;
+    this._sun.shadow.bias = -0.0006;
+    this._sun.shadow.normalBias = 0.04;
     this._sun.shadow.camera.near = 1;
     this._sun.shadow.camera.far = 4000;
     this.scene.add(this._sun);
     this.scene.add(this._sun.target);
-    this._fill = new THREE.DirectionalLight(0x8fb4d4, 0.28);
+    this._fill = new THREE.DirectionalLight(0x9eb8d0, 0.38);
     this._fill.position.set(70, 40, 50);
     this.scene.add(this._fill);
+    this._bounce = new THREE.DirectionalLight(0xcbb892, 0.22);
+    this._bounce.position.set(20, -30, 40);
+    this.scene.add(this._bounce);
     this._sky = this._makeSky();
     this.scene.add(this._sky);
+    this._sunDisc = this._makeSunDisc();
+    this.scene.add(this._sunDisc);
+    this._env = null;
 
     this.world = new THREE.Group();
     this.scene.add(this.world);
@@ -101,6 +107,8 @@ export class Viewport {
       this._sun.castShadow = false;
     }
     this.resize();
+    this._env = this._softwareGL ? null : this._makeEnv();
+    this.scene.environment = this._env;
     if (!this._softwareGL) this._buildComposer();
     else this.useBloom = false;
     this._loop();
@@ -133,9 +141,9 @@ export class Viewport {
     const geo = new THREE.SphereGeometry(4200, 32, 16);
     const pos = geo.attributes.position;
     const colors = new Float32Array(pos.count * 3);
-    const zenith = new THREE.Color("#8ea9c4");
-    const horizon = new THREE.Color("#d7cbb8");
-    const nadir = new THREE.Color("#1c2228");
+    const zenith = new THREE.Color("#6b97c6");
+    const horizon = new THREE.Color("#e4d4b6");
+    const nadir = new THREE.Color("#1a2228");
     const tmp = new THREE.Color();
     for (let i = 0; i < pos.count; i++) {
       const y = pos.getY(i) / 4200;
@@ -152,17 +160,57 @@ export class Viewport {
     );
   }
 
-  _fitSun(span, style) {
+  _makeSunDisc() {
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 16, 16),
+      new THREE.MeshBasicMaterial({ color: 0xfff3c4, fog: false, depthWrite: false }),
+    );
+    mesh.renderOrder = -1;
+    return mesh;
+  }
+
+  _makeEnv() {
+    try {
+      const pmrem = new THREE.PMREMGenerator(this.renderer);
+      const envScene = new THREE.Scene();
+      envScene.add(this._makeSky());
+      const blob = new THREE.Mesh(
+        new THREE.SphereGeometry(90, 12, 12),
+        new THREE.MeshBasicMaterial({ color: 0xfff1c2 }),
+      );
+      blob.position.set(-1400, 2100, -1000);
+      envScene.add(blob);
+      const tex = pmrem.fromScene(envScene, 0.04).texture;
+      pmrem.dispose();
+      return tex;
+    } catch {
+      return null;
+    }
+  }
+
+  _fitSun(span, style, sun) {
     const photo = style !== "hologram";
-    this._sun.position.set(-span * 0.52, span * 0.9, -span * 0.38);
+    const usePhotoSun = photo && sun && sun.confidence > 0.12;
+    const sx = usePhotoSun ? sun.worldX : -0.72;
+    const sz = usePhotoSun ? sun.worldZ : -0.52;
+    this._sun.position.set(sx * span * 0.78, span * 0.92, sz * span * 0.78);
     this._sun.target.position.set(0, 0, 0);
-    this._sun.intensity = photo ? 1.85 : 1.15;
-    this._fill.intensity = photo ? 0.4 : 0.18;
+    this._sun.intensity = photo ? 1.7 : 1.15;
+    this._fill.intensity = photo ? 0.42 : 0.16;
+    this._fill.position.set(-sx * span * 0.45, span * 0.22, -sz * span * 0.35);
+    this._bounce.intensity = photo ? 0.2 : 0.08;
     this._sun.castShadow = photo && !this._softwareGL && this.renderer.shadowMap.enabled;
     this._sky.visible = photo;
-    this.scene.background = new THREE.Color(photo ? "#9aa8b8" : "#05070a");
-    this.renderer.setClearColor(photo ? "#9aa8b8" : "#05070a", 1);
-    if (this.scene.fog) this.scene.fog.color.set(photo ? "#9aa8b8" : "#05070a");
+    this._sunDisc.visible = photo;
+    this._sunDisc.position.copy(this._sun.position);
+    this._sunDisc.scale.setScalar(span * 0.028);
+    this.scene.environment = photo ? this._env : null;
+    this.scene.background = new THREE.Color(photo ? "#b8c6d4" : "#05070a");
+    this.renderer.setClearColor(photo ? "#b8c6d4" : "#05070a", 1);
+    if (this.scene.fog) {
+      this.scene.fog.color.set(photo ? "#c3d0dc" : "#05070a");
+      if ("density" in this.scene.fog) this.scene.fog.density = photo ? 0.55 / Math.max(400, span) : 0.0008;
+    }
     const d = span * 0.72;
     this._sun.shadow.camera.left = -d;
     this._sun.shadow.camera.right = d;
@@ -170,10 +218,6 @@ export class Viewport {
     this._sun.shadow.camera.bottom = -d;
     this._sun.shadow.camera.far = span * 2.8;
     this._sun.shadow.camera.updateProjectionMatrix();
-    if (this.scene.fog) {
-      this.scene.fog.near = span * 1.55;
-      this.scene.fog.far = span * 3.6;
-    }
   }
 
   _buildComposer() {
@@ -251,7 +295,7 @@ export class Viewport {
     this._scan = this.world.getObjectByName("scan");
     const span = Math.max(reconstruction.width, reconstruction.height) * params.metersPerPixel;
     this._span = span;
-    this._fitSun(span, style);
+    this._fitSun(span, style, reconstruction.sun);
     this._viewKind = "iso";
     this._useCamera(this.persp);
     this.flyTo(

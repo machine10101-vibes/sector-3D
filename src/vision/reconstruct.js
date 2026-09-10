@@ -48,6 +48,7 @@ export async function reconstructFromImage(image, sourceType, params, onProgress
     mask: segmented.mask,
     coverage,
     sourceType: mode,
+    sun: segmented.sun || null,
   };
 }
 

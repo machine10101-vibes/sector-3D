@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { rgbToHsv } from "./filters.js";
 import { meanIoU } from "./geometry.js";
 import { defaultParams } from "./reconstruct.js";
-import { inferSourceType, isLimeRoof, isVegetation, segmentSatellite } from "./satellite.js";
+import { inferSourceType, isLimeRoof, isVegetation, segmentSatellite, estimateSunDirection } from "./satellite.js";
 import { HARBOR_BLOCKS, HARBOR_SIZE } from "../samples/demo.js";
 
 function makeImage(width, height, rgb = [42, 58, 40]) {
@@ -107,5 +107,27 @@ describe("segmentSatellite", () => {
     expect(inferSourceType(sat)).toBe("satellite");
     const bp = makeImage(200, 200, [244, 241, 234]);
     expect(inferSourceType(bp)).toBe("blueprint");
+  });
+
+  it("places the sun opposite a +X shadow cast", () => {
+    const w = 80;
+    const h = 80;
+    const luma = new Float32Array(w * h);
+    const shadow = new Uint8Array(w * h);
+    const buildings = new Uint8Array(w * h);
+    luma.fill(80);
+    for (let y = 22; y < 52; y++) {
+      for (let x = 12; x < 32; x++) {
+        luma[y * w + x] = 210;
+        buildings[y * w + x] = 1;
+      }
+      for (let x = 32; x < 58; x++) {
+        shadow[y * w + x] = 1;
+        luma[y * w + x] = 18;
+      }
+    }
+    const sun = estimateSunDirection(luma, shadow, w, h, buildings);
+    expect(sun.worldX).toBeLessThan(0);
+    expect(sun.confidence).toBeGreaterThan(0.12);
   });
 });

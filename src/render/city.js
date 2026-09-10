@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { earclip, ensureCCW, polygonArea, polygonCentroid } from "../vision/geometry.js";
-import { facadeRepeats, facadeTexture, wallColorFromRoof } from "./facades.js";
+import { facadeMaps, facadeRepeats, wallColorFromRoof } from "./facades.js";
 import { imageToUv, imageToWorld, worldSpan } from "./mapping.js";
 
 export const CYAN = new THREE.Color("#00e5ff");
@@ -87,6 +87,21 @@ function addBuilding(group, building, width, height, metersPerPixel, style, phot
     return [uv.u, uv.v];
   };
 
+  const insetPx = Math.max(0.55, 0.38 / metersPerPixel);
+  const roofRing = insetRing(points, insetPx);
+  let roofPts = points;
+  let roofIdx = indices;
+  try {
+    const clipped = earclip(roofRing);
+    if (clipped.indices.length >= 3) {
+      roofPts = clipped.points;
+      roofIdx = clipped.indices;
+    }
+  } catch {
+    roofPts = points;
+    roofIdx = indices;
+  }
+
   const sidePos = [];
   const sideUv = [];
   const sideCol = [];
@@ -94,11 +109,12 @@ function addBuilding(group, building, width, height, metersPerPixel, style, phot
   const roofUv = [];
   const linePos = [];
   const parapetPos = [];
+  const contactPos = [];
 
-  for (let i = 0; i < indices.length; i += 3) {
-    const pa = points[indices[i]];
-    const pb = points[indices[i + 1]];
-    const pc = points[indices[i + 2]];
+  for (let i = 0; i < roofIdx.length; i += 3) {
+    const pa = roofPts[roofIdx[i]];
+    const pb = roofPts[roofIdx[i + 1]];
+    const pc = roofPts[roofIdx[i + 2]];
     const a = toV(pa, roofY);
     const b = toV(pb, roofY);
     const c = toV(pc, roofY);
@@ -110,11 +126,16 @@ function addBuilding(group, building, width, height, metersPerPixel, style, phot
     linePos.push(a.x, a.y, a.z, b.x, b.y, b.z, b.x, b.y, b.z, c.x, c.y, c.z, c.x, c.y, c.z, a.x, a.y, a.z);
   }
 
-  const parapetH = Math.max(0.32, Math.min(0.85, roofY * 0.038));
+  const parapetH = Math.max(0.28, Math.min(0.9, roofY * 0.04));
+  const aoBase = 0.52;
+  const aoTop = 0.92;
   const n = points.length;
+  const contactW = Math.max(0.7, Math.min(1.8, roofY * 0.08));
   for (let i = 0; i < n; i++) {
     const p0 = points[i];
     const p1 = points[(i + 1) % n];
+    const q0 = roofRing[i] || p0;
+    const q1 = roofRing[(i + 1) % n] || p1;
     const b0 = toV(p0, 0);
     const b1 = toV(p1, 0);
     const t0 = toV(p0, roofY);
@@ -125,32 +146,40 @@ function addBuilding(group, building, width, height, metersPerPixel, style, phot
     const u1 = rep.u;
     const v0 = 0;
     const v1 = rep.v;
-    const base = 0.55;
-    const top = 1;
     const pushWall = (a, b, c, ua, va, ub, vb, uc, vc, sa, sb, sc) => {
       sidePos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
       sideUv.push(ua, va, ub, vb, uc, vc);
-      sideCol.push(
-        wallCol.r * sa,
-        wallCol.g * sa,
-        wallCol.b * sa,
-        wallCol.r * sb,
-        wallCol.g * sb,
-        wallCol.b * sb,
-        wallCol.r * sc,
-        wallCol.g * sc,
-        wallCol.b * sc,
-      );
+      sideCol.push(sa, sa, sa, sb, sb, sb, sc, sc, sc);
     };
     // Outward-facing winding for a CCW footprint viewed from +Y.
-    pushWall(b0, t0, t1, u0, v0, u0, v1, u1, v1, base, top, top);
-    pushWall(b0, t1, b1, u0, v0, u1, v1, u1, v0, base, top, base);
+    pushWall(b0, t0, t1, u0, v0, u0, v1, u1, v1, aoBase, aoTop, aoTop);
+    pushWall(b0, t1, b1, u0, v0, u1, v1, u1, v0, aoBase, aoTop, aoBase);
 
     const d0 = toV(p0, roofY + parapetH);
     const d1 = toV(p1, roofY + parapetH);
+    const e0 = toV(q0, roofY + parapetH);
+    const e1 = toV(q1, roofY + parapetH);
+    const i0 = toV(q0, roofY);
+    const i1 = toV(q1, roofY);
     const pushP = (a, b, c) => parapetPos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
     pushP(t0, d0, d1);
     pushP(t0, d1, t1);
+    pushP(d0, e0, e1);
+    pushP(d0, e1, d1);
+    pushP(e0, i0, i1);
+    pushP(e0, i1, e1);
+
+    const dx = b1.x - b0.x;
+    const dz = b1.z - b0.z;
+    const elen = Math.hypot(dx, dz) || 1;
+    const nx = dz / elen;
+    const nz = -dx / elen;
+    const o0 = new THREE.Vector3(b0.x + nx * contactW, 0.025, b0.z + nz * contactW);
+    const o1 = new THREE.Vector3(b1.x + nx * contactW, 0.025, b1.z + nz * contactW);
+    const c0 = new THREE.Vector3(b0.x, 0.025, b0.z);
+    const c1 = new THREE.Vector3(b1.x, 0.025, b1.z);
+    contactPos.push(c0.x, c0.y, c0.z, c1.x, c1.y, c1.z, o1.x, o1.y, o1.z);
+    contactPos.push(c0.x, c0.y, c0.z, o1.x, o1.y, o1.z, o0.x, o0.y, o0.z);
 
     linePos.push(b0.x, 0, b0.z, t0.x, roofY, t0.z);
     linePos.push(b0.x, 0, b0.z, b1.x, 0, b1.z);
@@ -163,6 +192,7 @@ function addBuilding(group, building, width, height, metersPerPixel, style, phot
   };
   const pick = [];
 
+  const maps = facadeMaps(kind, wallCol, building.id || 0);
   const sideGeom = new THREE.BufferGeometry();
   sideGeom.setAttribute("position", new THREE.Float32BufferAttribute(sidePos, 3));
   sideGeom.setAttribute("uv", new THREE.Float32BufferAttribute(sideUv, 2));
@@ -170,16 +200,17 @@ function addBuilding(group, building, width, height, metersPerPixel, style, phot
   sideGeom.computeVertexNormals();
   const sideMat = lit
     ? new THREE.MeshStandardMaterial({
-        map: facadeTexture(kind),
+        map: maps.map,
+        roughnessMap: maps.roughnessMap,
+        metalnessMap: maps.metalnessMap,
+        roughness: 1,
+        metalness: 0.5,
         vertexColors: true,
-        roughness: 0.68,
-        metalness: 0.03,
-        emissive: new THREE.Color("#1a1814"),
-        emissiveIntensity: 0.18,
+        envMapIntensity: 1.05,
         side: THREE.FrontSide,
       })
     : new THREE.MeshBasicMaterial({
-        map: facadeTexture(kind),
+        map: maps.map,
         vertexColors: true,
         side: THREE.FrontSide,
       });
@@ -204,10 +235,19 @@ function addBuilding(group, building, width, height, metersPerPixel, style, phot
     });
     const roofMesh = new THREE.Mesh(roofGeom, roofMat);
     roofMesh.castShadow = !!shadows;
-    roofMesh.receiveShadow = !!shadows;
     roofMesh.userData = userData;
     group.add(roofMesh);
     pick.push(roofMesh);
+    if (shadows) {
+      const roofCatch = new THREE.Mesh(
+        roofGeom,
+        new THREE.ShadowMaterial({ color: 0x1a1612, opacity: 0.28, depthWrite: false }),
+      );
+      roofCatch.receiveShadow = true;
+      roofCatch.renderOrder = 2;
+      roofCatch.userData = userData;
+      group.add(roofCatch);
+    }
   }
 
   if (parapetPos.length && lit) {
@@ -226,6 +266,25 @@ function addBuilding(group, building, width, height, metersPerPixel, style, phot
     para.castShadow = !!shadows;
     para.userData = userData;
     group.add(para);
+  }
+
+  if (contactPos.length && lit) {
+    const contactGeom = new THREE.BufferGeometry();
+    contactGeom.setAttribute("position", new THREE.Float32BufferAttribute(contactPos, 3));
+    setUpNormals(contactGeom);
+    const contact = new THREE.Mesh(
+      contactGeom,
+      new THREE.MeshBasicMaterial({
+        color: 0x0c0c0a,
+        transparent: true,
+        opacity: 0.28,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
+    );
+    contact.renderOrder = 1;
+    contact.userData = userData;
+    group.add(contact);
   }
 
   if (neon || !lit) {
@@ -373,8 +432,18 @@ export function buildGround(reconstruction, params, style = "photo", shadows = f
   });
   const ground = new THREE.Mesh(groundGeom, groundMat);
   if (groundGeom instanceof THREE.PlaneGeometry) ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = shadows;
   group.add(ground);
+  if (shadows) {
+    const catcher = new THREE.Mesh(
+      groundGeom,
+      new THREE.ShadowMaterial({ color: 0x161410, opacity: 0.34, depthWrite: false }),
+    );
+    catcher.receiveShadow = true;
+    catcher.renderOrder = 1;
+    catcher.position.y = 0.02;
+    if (groundGeom instanceof THREE.PlaneGeometry) catcher.rotation.x = -Math.PI / 2;
+    group.add(catcher);
+  }
 
   const circuit = new THREE.GridHelper(Math.max(worldW, worldD), 48, 0x14505c, 0x0b1c24);
   circuit.position.y = 0.03;

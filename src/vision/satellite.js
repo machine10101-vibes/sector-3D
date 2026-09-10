@@ -258,7 +258,8 @@ export function segmentSatellite(imageData, params) {
   }
 
   const lights = extractActivityLights(imageData, veg, water, sealedGround, width, height);
-  return { buildings, mask: plateaus, veg, water, shadow, lights, luma, width, height };
+  const sun = estimateSunDirection(luma, shadow, width, height, plateaus);
+  return { buildings, mask: plateaus, veg, water, shadow, lights, luma, width, height, sun };
 }
 
 export function inferSourceType(imageData) {
@@ -280,20 +281,75 @@ export function inferSourceType(imageData) {
   return "satellite";
 }
 
+const SUN_DIRS = [
+  [1, 0],
+  [1, 1],
+  [0, 1],
+  [-1, 1],
+  [-1, 0],
+  [-1, -1],
+  [0, -1],
+  [1, -1],
+];
+
+/**
+ * Infer the sun's world XZ direction from nadir shadows.
+ * Image +X/+Y maps to world +X/+Z; the sun sits opposite the shadow cast.
+ * When `buildings` is provided, rays start on roofs so lawn/shadow far edges do not vote.
+ */
+export function estimateSunDirection(luma, shadow, width, height, buildings = null) {
+  const scores = new Float32Array(8);
+  const step = Math.max(3, Math.round(Math.min(width, height) / 72));
+  let casts = 0;
+  for (let y = 6; y < height - 6; y += step) {
+    for (let x = 6; x < width - 6; x += step) {
+      const i = y * width + x;
+      if (shadow[i]) continue;
+      if (buildings) {
+        if (!buildings[i]) continue;
+      } else if (luma[i] < 90) {
+        continue;
+      }
+      for (let d = 0; d < 8; d++) {
+        const dx = SUN_DIRS[d][0];
+        const dy = SUN_DIRS[d][1];
+        let dark = 0;
+        for (let t = 1; t < 22; t++) {
+          const nx = x + dx * t;
+          const ny = y + dy * t;
+          if (nx < 0 || ny < 0 || nx >= width || ny >= height) break;
+          const ni = ny * width + nx;
+          if (buildings && buildings[ni]) continue;
+          const isDark = shadow[ni] || luma[ni] < luma[i] * 0.55;
+          if (isDark) dark++;
+          else break;
+        }
+        if (dark >= 2) {
+          scores[d] += dark;
+          casts++;
+        }
+      }
+    }
+  }
+  let best = 0;
+  for (let i = 1; i < 8; i++) if (scores[i] > scores[best]) best = i;
+  const dx = SUN_DIRS[best][0];
+  const dy = SUN_DIRS[best][1];
+  const len = Math.hypot(dx, dy) || 1;
+  const confidence = casts < 6 ? 0 : scores[best] / Math.max(1, scores.reduce((s, v) => s + v, 0));
+  return {
+    imageDx: dx,
+    imageDy: dy,
+    worldX: -dx / len,
+    worldZ: -dy / len,
+    confidence,
+  };
+}
+
 function estimateShadowLength(luma, shadow, width, height, component, mean) {
-  const dirs = [
-    [1, 0],
-    [1, 1],
-    [0, 1],
-    [-1, 1],
-    [-1, 0],
-    [-1, -1],
-    [0, -1],
-    [1, -1],
-  ];
   const { centroid, bounds } = component;
   let best = 0;
-  for (const [dx, dy] of dirs) {
+  for (const [dx, dy] of SUN_DIRS) {
     let len = 0;
     let darkRun = 0;
     for (let t = 1; t < 80; t++) {
