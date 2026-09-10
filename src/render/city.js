@@ -69,7 +69,7 @@ function addBuilding(group, building, width, height, metersPerPixel, style, phot
   const { points, indices } = earclip(building.polygon);
   if (indices.length < 3 || points.length < 3) return [];
 
-  const roofY = Math.max(2.4, building.height * metersPerPixel * 1.45);
+  const roofY = Math.max(2.4, building.height * metersPerPixel * 1.12);
   const accent = accentFor(building);
   const neon = neonLines(style);
   const lit = isLit(style);
@@ -77,7 +77,7 @@ function addBuilding(group, building, width, height, metersPerPixel, style, phot
     ? new THREE.Color(building.roofColor.r / 255, building.roofColor.g / 255, building.roofColor.b / 255)
     : new THREE.Color("#c8c2b6");
   const wallCol = wallColorFromRoof(roofCol);
-  const kind = building.className || "lowrise";
+  const kind = roofY >= 30 ? "highrise" : roofY >= 13 ? "mid" : "lowrise";
   const toV = (p, y) => {
     const w = imageToWorld(p.x, p.y, width, height, metersPerPixel);
     return new THREE.Vector3(w.x, y, w.z);
@@ -126,9 +126,9 @@ function addBuilding(group, building, width, height, metersPerPixel, style, phot
     linePos.push(a.x, a.y, a.z, b.x, b.y, b.z, b.x, b.y, b.z, c.x, c.y, c.z, c.x, c.y, c.z, a.x, a.y, a.z);
   }
 
-  const parapetH = Math.max(0.28, Math.min(0.9, roofY * 0.04));
-  const aoBase = 0.52;
-  const aoTop = 0.92;
+  const parapetH = Math.max(0.4, Math.min(1.15, roofY * 0.055));
+  const aoBase = 0.78;
+  const aoTop = 1;
   const n = points.length;
   const contactW = Math.max(0.7, Math.min(1.8, roofY * 0.08));
   for (let i = 0; i < n; i++) {
@@ -204,9 +204,9 @@ function addBuilding(group, building, width, height, metersPerPixel, style, phot
         roughnessMap: maps.roughnessMap,
         metalnessMap: maps.metalnessMap,
         roughness: 1,
-        metalness: 0.5,
+        metalness: 0.35,
         vertexColors: true,
-        envMapIntensity: 1.05,
+        envMapIntensity: 0.85,
         side: THREE.FrontSide,
       })
     : new THREE.MeshBasicMaterial({
@@ -481,7 +481,7 @@ export function buildGround(reconstruction, params, style = "photo", shadows = f
     );
     scan.rotation.x = -Math.PI / 2;
     scan.name = "scan";
-    scan.userData.maxY = Math.max(18, ...reconstruction.buildings.map((b) => b.height * mpp * 1.45));
+    scan.userData.maxY = Math.max(18, ...reconstruction.buildings.map((b) => b.height * mpp * 1.12));
     group.add(scan);
   }
 

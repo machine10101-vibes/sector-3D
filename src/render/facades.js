@@ -83,9 +83,9 @@ function paintMaps(kind, wallColor, seed) {
   const bayW = w / bays;
   const curtain = kind === "highrise";
   const ribbon = kind === "mid";
-  const windowW = curtain ? 0.78 : ribbon ? 0.56 : 0.36;
-  const windowH = curtain ? 0.7 : ribbon ? 0.48 : 0.4;
-  const litChance = kind === "highrise" ? 0.9 : kind === "mid" ? 0.94 : 0.97;
+  const windowW = curtain ? 0.74 : ribbon ? 0.42 : 0.32;
+  const windowH = curtain ? 0.68 : ribbon ? 0.44 : 0.38;
+  const litChance = 0.985;
   const glassCool = 0.18 + hash(seed) * 0.1;
 
   for (let f = 0; f < floors; f++) {
@@ -187,12 +187,12 @@ export function facadeTexture(kind, wallColor = new THREE.Color("#8a8680"), seed
 
 export function wallColorFromRoof(roofCol) {
   const c = roofCol.clone();
-  c.offsetHSL(0.015, -0.18, -0.14);
-  c.lerp(new THREE.Color("#8a8378"), 0.34);
+  c.offsetHSL(0.01, -0.1, -0.05);
+  c.lerp(new THREE.Color("#c4b7a6"), 0.38);
   const hsl = { h: 0, s: 0, l: 0 };
   c.getHSL(hsl);
-  if (hsl.l < 0.22) c.setHSL(hsl.h, hsl.s * 0.7, 0.28);
-  if (hsl.l > 0.62) c.setHSL(hsl.h, hsl.s, 0.5);
+  if (hsl.l < 0.34) c.setHSL(hsl.h, Math.min(0.18, hsl.s), 0.4);
+  if (hsl.l > 0.72) c.setHSL(hsl.h, hsl.s, 0.58);
   return c;
 }
 

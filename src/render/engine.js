@@ -51,7 +51,7 @@ export class Viewport {
       this.controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
     }
 
-    this.scene.add(new THREE.HemisphereLight(0xdbe7f4, 0x5a5346, 1.05));
+    this.scene.add(new THREE.HemisphereLight(0xe4eef6, 0x6a5e50, 1.22));
     this._sun = new THREE.DirectionalLight(0xfff1d6, 1.7);
     this._sun.position.set(-80, 140, -60);
     this._sun.castShadow = true;
@@ -141,13 +141,13 @@ export class Viewport {
     const geo = new THREE.SphereGeometry(4200, 32, 16);
     const pos = geo.attributes.position;
     const colors = new Float32Array(pos.count * 3);
-    const zenith = new THREE.Color("#6b97c6");
-    const horizon = new THREE.Color("#e4d4b6");
+    const zenith = new THREE.Color("#5b8ec8");
+    const horizon = new THREE.Color("#d7d2c4");
     const nadir = new THREE.Color("#1a2228");
     const tmp = new THREE.Color();
     for (let i = 0; i < pos.count; i++) {
       const y = pos.getY(i) / 4200;
-      if (y >= 0) tmp.copy(horizon).lerp(zenith, Math.pow(y, 0.65));
+      if (y >= 0) tmp.copy(horizon).lerp(zenith, Math.pow(Math.max(0, y), 0.42));
       else tmp.copy(horizon).lerp(nadir, Math.min(1, -y * 1.4));
       colors[i * 3] = tmp.r;
       colors[i * 3 + 1] = tmp.g;
@@ -209,7 +209,7 @@ export class Viewport {
     this.renderer.setClearColor(photo ? "#b8c6d4" : "#05070a", 1);
     if (this.scene.fog) {
       this.scene.fog.color.set(photo ? "#c3d0dc" : "#05070a");
-      if ("density" in this.scene.fog) this.scene.fog.density = photo ? 0.55 / Math.max(400, span) : 0.0008;
+      if ("density" in this.scene.fog) this.scene.fog.density = photo ? 0.22 / Math.max(500, span) : 0.0008;
     }
     const d = span * 0.72;
     this._sun.shadow.camera.left = -d;
@@ -324,7 +324,7 @@ export class Viewport {
     } else {
       this._useCamera(this.persp);
       if (kind === "street") {
-        this.flyTo(new THREE.Vector3(span * 0.02, span * 0.09, span * 0.48), new THREE.Vector3(0, span * 0.05, 0));
+        this.flyTo(new THREE.Vector3(span * 0.03, span * 0.028, span * 0.26), new THREE.Vector3(0, span * 0.03, 0));
       } else {
         this.flyTo(new THREE.Vector3(span * 0.62, span * 0.48, span * 0.68), new THREE.Vector3(0, span * 0.04, 0));
       }
