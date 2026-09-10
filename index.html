@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
     <title>SECTOR-3D — Exterior Cartography</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -24,14 +24,22 @@
           <div class="logo">SECTOR-3D</div>
           <div class="tag">Exterior 3D cartography engine</div>
         </div>
-        <div class="sys"><span class="pulse"></span> SYS ONLINE · PIXEL-LOCKED EXTRUSION</div>
+        <div class="top-actions">
+          <button class="nav-btn" id="open-source" type="button">Source</button>
+          <button class="nav-btn" id="open-recon" type="button">Stats</button>
+          <div class="sys"><span class="pulse"></span> <span class="sys-copy">SYS ONLINE · PIXEL-LOCKED EXTRUSION</span></div>
+        </div>
       </header>
 
       <main class="workspace">
-        <aside class="panel" id="source-panel">
-          <h2>Source raster</h2>
+        <aside class="panel drawer drawer-left" id="source-panel">
+          <div class="panel-head">
+            <h2>Source raster</h2>
+            <button class="drawer-close" type="button" data-close="source-panel" aria-label="Close source">Close</button>
+          </div>
           <div class="segmented" id="source-type">
-            <button type="button" data-type="satellite" class="active">Satellite</button>
+            <button type="button" data-type="auto" class="active">Auto</button>
+            <button type="button" data-type="satellite">Satellite</button>
             <button type="button" data-type="blueprint">Blueprint</button>
           </div>
           <label class="drop" id="drop">
@@ -44,16 +52,16 @@
             <button class="btn ghost" id="demo-bp" type="button">Load Civic Floor Plan</button>
           </div>
           <div class="field">
-            <label>Sensitivity <span id="v-sens">0.62</span></label>
-            <input id="sensitivity" type="range" min="0.25" max="0.95" step="0.01" value="0.62" />
+            <label>Sensitivity <span id="v-sens">0.68</span></label>
+            <input id="sensitivity" type="range" min="0.25" max="0.95" step="0.01" value="0.68" />
           </div>
           <div class="field">
-            <label>Min footprint px <span id="v-area">90</span></label>
-            <input id="minArea" type="range" min="24" max="400" step="2" value="90" />
+            <label>Min footprint px <span id="v-area">70</span></label>
+            <input id="minArea" type="range" min="24" max="400" step="2" value="70" />
           </div>
           <div class="field">
-            <label>Simplify <span id="v-simp">2.2</span></label>
-            <input id="simplify" type="range" min="0.6" max="8" step="0.1" value="2.2" />
+            <label>Simplify <span id="v-simp">1.0</span></label>
+            <input id="simplify" type="range" min="0.6" max="8" step="0.1" value="1" />
           </div>
           <div class="field">
             <label>Height scale <span id="v-h">1.00</span></label>
@@ -73,11 +81,21 @@
 
         <section class="viewport-wrap" id="stage">
           <div class="view-switch">
-            <button class="chip active" data-view="3d" type="button">3D hologram</button>
-            <button class="chip" data-view="source" type="button">Source lock</button>
+            <button class="chip active" data-view="3d" type="button"><span class="full">3D map</span><span class="short">3D</span></button>
+            <button class="chip" data-view="source" type="button"><span class="full">Source lock</span><span class="short">Lock</span></button>
+            <button class="chip" data-view="split" type="button">Split</button>
           </div>
+          <button class="chip fs" id="fullscreen" type="button"><span class="full">Fullscreen</span><span class="short">Full</span></button>
           <div id="viewport"></div>
           <div id="overlay-view"><canvas id="overlay-canvas"></canvas></div>
+          <aside class="inspect" id="inspect" hidden>
+            <h3>Structure</h3>
+            <p id="inspect-body">Click a volume to inspect.</p>
+          </aside>
+          <div class="progress" id="progress" hidden>
+            <span id="progress-label">Reconstructing</span>
+            <i><b id="progress-bar"></b></i>
+          </div>
           <div class="scanlines"></div>
           <div class="hud-corners">
             <span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span>
@@ -88,8 +106,11 @@
           </div>
         </section>
 
-        <aside class="panel">
-          <h2>Reconstruction</h2>
+        <aside class="panel drawer drawer-right" id="recon-panel">
+          <div class="panel-head">
+            <h2>Reconstruction</h2>
+            <button class="drawer-close" type="button" data-close="recon-panel" aria-label="Close stats">Close</button>
+          </div>
           <div class="stat-grid">
             <div class="stat"><em>Structures</em><strong id="s-count">00</strong></div>
             <div class="stat"><em>Coverage</em><strong id="s-cov">—</strong></div>
@@ -98,15 +119,17 @@
           </div>
           <h2>Presentation</h2>
           <div class="segmented" id="style">
-            <button type="button" data-style="hologram" class="active">Hologram</button>
+            <button type="button" data-style="photo" class="active">Photo lock</button>
             <button type="button" data-style="hybrid">Hybrid</button>
+            <button type="button" data-style="hologram">Hologram</button>
           </div>
           <div class="toggles">
-            <label class="toggle">Bloom<input id="bloom" type="checkbox" checked /></label>
+            <label class="toggle">Bloom<input id="bloom" type="checkbox" /></label>
             <label class="toggle">Ground texture<input id="groundTex" type="checkbox" checked /></label>
-            <label class="toggle">Grid<input id="grid" type="checkbox" checked /></label>
-            <label class="toggle">Activity nodes<input id="lights" type="checkbox" checked /></label>
+            <label class="toggle">Grid<input id="grid" type="checkbox" /></label>
+            <label class="toggle">Activity nodes<input id="lights" type="checkbox" /></label>
             <label class="toggle">Auto orbit<input id="orbit" type="checkbox" /></label>
+            <label class="toggle">Live rebuild<input id="live" type="checkbox" checked /></label>
           </div>
           <div class="segmented cam-switch" id="cam">
             <button type="button" data-cam="iso" class="active">Iso</button>
@@ -124,10 +147,11 @@
 
       <footer class="statusbar">
         <div id="status-left">SECTOR IDLE</div>
-        <div>Footprints remain registered to source pixels · heights from shadow + mass</div>
+        <div class="status-hints">Drag to orbit · click a volume to inspect · 1 Iso · 2 Nadir · 3 Street · F fullscreen</div>
         <div id="clock"></div>
       </footer>
     </div>
+    <div class="backdrop" id="backdrop" hidden></div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

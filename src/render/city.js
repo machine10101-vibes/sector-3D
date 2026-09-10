@@ -1,59 +1,96 @@
 import * as THREE from "three";
-import { earclip } from "../vision/geometry.js";
+import { earclip, ensureCCW, polygonArea, polygonCentroid } from "../vision/geometry.js";
+import { imageToUv, imageToWorld, worldSpan } from "./mapping.js";
 
-const CYAN = new THREE.Color("#00e5ff");
-const LIME = new THREE.Color("#d4ff00");
-const AMBER = new THREE.Color("#ffb300");
+export const CYAN = new THREE.Color("#00e5ff");
+export const LIME = new THREE.Color("#d4ff00");
+export const AMBER = new THREE.Color("#ffb300");
 
-function imageToWorld(x, y, width, height, metersPerPixel) {
-  const worldW = width * metersPerPixel;
-  const worldD = height * metersPerPixel;
-  return {
-    x: x * metersPerPixel - worldW / 2,
-    z: y * metersPerPixel - worldD / 2,
-    worldW,
-    worldD,
-  };
-}
+export { imageToWorld };
 
-function buildingColor(building) {
+function accentFor(building) {
   return building.className === "lowrise" ? LIME : CYAN;
 }
 
-function addTriangulatedBuilding(group, building, width, height, metersPerPixel, style) {
+function glowSprite(color, size = 64) {
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d");
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, color);
+  g.addColorStop(0.35, color);
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(c);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+export function sourceTexture(canvas, anisotropy = 8) {
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = anisotropy;
+  tex.flipY = true;
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+function neonLines(style) {
+  return style === "hologram" || style === "hybrid";
+}
+
+function insetRing(ring, px) {
+  const c = polygonCentroid(ring);
+  return ring.map((p) => {
+    const dx = c.x - p.x;
+    const dy = c.y - p.y;
+    const len = Math.hypot(dx, dy) || 1;
+    return { x: p.x + (dx / len) * px, y: p.y + (dy / len) * px };
+  });
+}
+
+function addBuilding(group, building, width, height, metersPerPixel, style, photoTex) {
   const { points, indices } = earclip(building.polygon);
-  if (indices.length < 3 || points.length < 3) return;
+  if (indices.length < 3 || points.length < 3) return [];
 
-  const roofY = building.height * metersPerPixel * 1.15;
-  const positions = [];
-  const colors = [];
-  const uvs = [];
-  const linePos = [];
-  const accent = buildingColor(building);
-  const roof = new THREE.Color(
-    building.roofColor.r / 255,
-    building.roofColor.g / 255,
-    building.roofColor.b / 255,
-  );
-  const face = style === "hybrid" ? roof.lerp(accent, 0.22) : accent.clone().multiplyScalar(0.09);
-
+  const roofY = Math.max(2.4, building.height * metersPerPixel * 1.45);
+  const accent = accentFor(building);
+  const neon = neonLines(style);
+  const roofCol = building.roofColor
+    ? new THREE.Color(building.roofColor.r / 255, building.roofColor.g / 255, building.roofColor.b / 255)
+    : new THREE.Color("#c8c2b6");
   const toV = (p, y) => {
     const w = imageToWorld(p.x, p.y, width, height, metersPerPixel);
     return new THREE.Vector3(w.x, y, w.z);
   };
-
-  const pushTri = (a, b, c, col) => {
-    positions.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
-    for (let i = 0; i < 3; i++) colors.push(col.r, col.g, col.b);
-    uvs.push(0, 0, 1, 0, 0, 1);
-    linePos.push(a.x, a.y, a.z, b.x, b.y, b.z, b.x, b.y, b.z, c.x, c.y, c.z, c.x, c.y, c.z, a.x, a.y, a.z);
+  const toUV = (p) => {
+    const uv = imageToUv(p.x, p.y, width, height);
+    return [uv.u, uv.v];
   };
 
+  const sidePos = [];
+  const sideCol = [];
+  const roofPos = [];
+  const roofUv = [];
+  const linePos = [];
+
   for (let i = 0; i < indices.length; i += 3) {
-    const a = toV(points[indices[i]], roofY);
-    const b = toV(points[indices[i + 1]], roofY);
-    const c = toV(points[indices[i + 2]], roofY);
-    pushTri(a, b, c, face);
+    const pa = points[indices[i]];
+    const pb = points[indices[i + 1]];
+    const pc = points[indices[i + 2]];
+    const a = toV(pa, roofY);
+    const b = toV(pb, roofY);
+    const c = toV(pc, roofY);
+    roofPos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+    const ua = toUV(pa);
+    const ub = toUV(pb);
+    const uc = toUV(pc);
+    roofUv.push(ua[0], ua[1], ub[0], ub[1], uc[0], uc[1]);
+    linePos.push(a.x, a.y, a.z, b.x, b.y, b.z, b.x, b.y, b.z, c.x, c.y, c.z, c.x, c.y, c.z, a.x, a.y, a.z);
   }
 
   const n = points.length;
@@ -64,107 +101,273 @@ function addTriangulatedBuilding(group, building, width, height, metersPerPixel,
     const b1 = toV(p1, 0);
     const t0 = toV(p0, roofY);
     const t1 = toV(p1, roofY);
-    pushTri(b0, b1, t1, face);
-    pushTri(b0, t1, t0, face);
+    const base = 0.42;
+    const top = 1;
+    const push = (a, b, c, sa, sb, sc) => {
+      sidePos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+      sideCol.push(
+        roofCol.r * sa,
+        roofCol.g * sa,
+        roofCol.b * sa,
+        roofCol.r * sb,
+        roofCol.g * sb,
+        roofCol.b * sb,
+        roofCol.r * sc,
+        roofCol.g * sc,
+        roofCol.b * sc,
+      );
+    };
+    push(b0, b1, t1, base, base, top);
+    push(b0, t1, t0, base, top, top);
+    linePos.push(b0.x, 0, b0.z, t0.x, roofY, t0.z);
+    linePos.push(b0.x, 0, b0.z, b1.x, 0, b1.z);
   }
 
-  const geom = new THREE.BufferGeometry();
-  geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  geom.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
-  geom.computeVertexNormals();
+  const userData = {
+    buildingId: building.id,
+    building,
+    accent: accent.getHex(),
+  };
+  const pick = [];
 
-  const meshMat = new THREE.MeshBasicMaterial({
-    vertexColors: true,
-    transparent: true,
-    opacity: style === "hologram" ? 0.32 : 0.7,
-    side: THREE.DoubleSide,
-    depthWrite: style !== "hologram",
-  });
-  const mesh = new THREE.Mesh(geom, meshMat);
-  mesh.userData.buildingId = building.id;
-  group.add(mesh);
+  const sideGeom = new THREE.BufferGeometry();
+  sideGeom.setAttribute("position", new THREE.Float32BufferAttribute(sidePos, 3));
+  sideGeom.setAttribute("color", new THREE.Float32BufferAttribute(sideCol, 3));
+  sideGeom.computeVertexNormals();
+  const sideMesh = new THREE.Mesh(
+    sideGeom,
+    new THREE.MeshBasicMaterial({
+      vertexColors: true,
+      transparent: false,
+      opacity: 1,
+      side: THREE.DoubleSide,
+      depthWrite: true,
+    }),
+  );
+  sideMesh.userData = userData;
+  group.add(sideMesh);
+  pick.push(sideMesh);
+
+  if (roofPos.length && photoTex) {
+    const roofGeom = new THREE.BufferGeometry();
+    roofGeom.setAttribute("position", new THREE.Float32BufferAttribute(roofPos, 3));
+    roofGeom.setAttribute("uv", new THREE.Float32BufferAttribute(roofUv, 2));
+    roofGeom.computeVertexNormals();
+    const roofMesh = new THREE.Mesh(
+      roofGeom,
+      new THREE.MeshBasicMaterial({
+        map: photoTex,
+        transparent: false,
+        opacity: 1,
+        side: THREE.DoubleSide,
+        depthWrite: true,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
+      }),
+    );
+    roofMesh.userData = userData;
+    group.add(roofMesh);
+    pick.push(roofMesh);
+  }
 
   const lineGeom = new THREE.BufferGeometry();
   lineGeom.setAttribute("position", new THREE.Float32BufferAttribute(linePos, 3));
-  const lineMat = new THREE.LineBasicMaterial({
-    color: accent,
-    transparent: true,
-    opacity: 0.95,
-  });
-  group.add(new THREE.LineSegments(lineGeom, lineMat));
+  group.add(
+    new THREE.LineSegments(
+      lineGeom,
+      new THREE.LineBasicMaterial({
+        color: neon ? accent : 0x11161c,
+        transparent: true,
+        opacity: neon ? (style === "hologram" ? 0.88 : 0.42) : 0.16,
+      }),
+    ),
+  );
+
+  return pick;
 }
 
-export function buildCityGroup(reconstruction, params, style) {
+export function buildCityGroup(reconstruction, params, style, photoTex) {
   const group = new THREE.Group();
   group.name = "city";
   const { width, height, buildings, lights } = reconstruction;
   const mpp = params.metersPerPixel;
+  const pickables = [];
+  const tex = photoTex || sourceTexture(reconstruction.canvas);
 
   for (const b of buildings) {
-    addTriangulatedBuilding(group, b, width, height, mpp, style);
+    const meshes = addBuilding(group, b, width, height, mpp, style, tex);
+    if (meshes?.length) pickables.push(...meshes);
   }
 
-  if (params.showLights !== false) {
-    const pts = [];
+  const showLights = params.showLights !== false && style === "hologram" && lights?.length;
+  if (showLights) {
+    const sprite = glowSprite("rgba(255,179,0,1)");
+    const positions = [];
     for (const l of lights) {
       const w = imageToWorld(l.x, l.y, width, height, mpp);
-      pts.push(w.x, 0.6, w.z);
+      positions.push(w.x, 0.9, w.z);
     }
-    if (pts.length) {
-      const g = new THREE.BufferGeometry();
-      g.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
-      const m = new THREE.PointsMaterial({
-        color: AMBER,
-        size: 2.4,
-        sizeAttenuation: true,
-        transparent: true,
-        opacity: 0.95,
-      });
-      group.add(new THREE.Points(g, m));
-    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    group.add(
+      new THREE.Points(
+        g,
+        new THREE.PointsMaterial({
+          map: sprite,
+          color: AMBER,
+          size: 4.8,
+          sizeAttenuation: true,
+          transparent: true,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+        }),
+      ),
+    );
   }
 
+  group.userData.pickables = pickables;
   return group;
 }
 
-export function buildGround(reconstruction, params, style = "hologram") {
+function buildPhotoGround(reconstruction, params) {
+  const { width, height, buildings } = reconstruction;
+  const mpp = params.metersPerPixel;
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0);
+  shape.lineTo(width, 0);
+  shape.lineTo(width, height);
+  shape.lineTo(0, height);
+  shape.closePath();
+
+  for (const b of buildings) {
+    if (!b.polygon?.length) continue;
+    const ring = ensureCCW(insetRing(b.polygon, 0.45));
+    if (Math.abs(polygonArea(ring)) < 8) continue;
+    const hole = new THREE.Path();
+    const cw = ring.slice().reverse();
+    hole.moveTo(cw[0].x, cw[0].y);
+    for (let i = 1; i < cw.length; i++) hole.lineTo(cw[i].x, cw[i].y);
+    hole.closePath();
+    shape.holes.push(hole);
+  }
+
+  const geom = new THREE.ShapeGeometry(shape, 3);
+  const pos = geom.attributes.position;
+  const uvs = new Float32Array(pos.count * 2);
+  for (let i = 0; i < pos.count; i++) {
+    const ix = pos.getX(i);
+    const iy = pos.getY(i);
+    const uv = imageToUv(ix, iy, width, height);
+    uvs[i * 2] = uv.u;
+    uvs[i * 2 + 1] = uv.v;
+    const w = imageToWorld(ix, iy, width, height, mpp);
+    pos.setXYZ(i, w.x, 0, w.z);
+  }
+  geom.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geom.computeVertexNormals();
+  return geom;
+}
+
+export function buildGround(reconstruction, params, style = "photo") {
   const group = new THREE.Group();
   const mpp = params.metersPerPixel;
-  const worldW = reconstruction.width * mpp;
-  const worldD = reconstruction.height * mpp;
+  const { worldW, worldD } = worldSpan(reconstruction.width, reconstruction.height, mpp);
+  const tex = sourceTexture(reconstruction.canvas);
+  const neon = neonLines(style);
+  const showPhoto = params.showGroundTexture !== false;
 
-  const tex = new THREE.CanvasTexture(reconstruction.canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 8;
-  tex.needsUpdate = true;
-
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(worldW, worldD),
-    new THREE.MeshBasicMaterial({
-      map: tex,
-      transparent: true,
-      opacity: params.showGroundTexture ? (style === "hybrid" ? 0.72 : 0.38) : 0.08,
-    }),
-  );
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.y = 0;
-  group.add(ground);
-
-  if (params.showGrid) {
-    const grid = new THREE.GridHelper(Math.max(worldW, worldD), 32, 0x12303a, 0x0d1c24);
-    grid.position.y = 0.02;
-    group.add(grid);
+  let groundGeom;
+  try {
+    groundGeom = showPhoto ? buildPhotoGround(reconstruction, params) : new THREE.PlaneGeometry(worldW, worldD);
+  } catch {
+    groundGeom = new THREE.BufferGeometry();
+    const p00 = imageToWorld(0, 0, reconstruction.width, reconstruction.height, mpp);
+    const p10 = imageToWorld(reconstruction.width, 0, reconstruction.width, reconstruction.height, mpp);
+    const p11 = imageToWorld(reconstruction.width, reconstruction.height, reconstruction.width, reconstruction.height, mpp);
+    const p01 = imageToWorld(0, reconstruction.height, reconstruction.width, reconstruction.height, mpp);
+    groundGeom.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(
+        [p00.x, 0, p00.z, p10.x, 0, p10.z, p11.x, 0, p11.z, p00.x, 0, p00.z, p11.x, 0, p11.z, p01.x, 0, p01.z],
+        3,
+      ),
+    );
+    const u00 = imageToUv(0, 0, reconstruction.width, reconstruction.height);
+    const u10 = imageToUv(reconstruction.width, 0, reconstruction.width, reconstruction.height);
+    const u11 = imageToUv(reconstruction.width, reconstruction.height, reconstruction.width, reconstruction.height);
+    const u01 = imageToUv(0, reconstruction.height, reconstruction.width, reconstruction.height);
+    groundGeom.setAttribute(
+      "uv",
+      new THREE.Float32BufferAttribute(
+        [u00.u, u00.v, u10.u, u10.v, u11.u, u11.v, u00.u, u00.v, u11.u, u11.v, u01.u, u01.v],
+        2,
+      ),
+    );
   }
 
-  const rim = new THREE.LineSegments(
-    new THREE.EdgesGeometry(new THREE.PlaneGeometry(worldW, worldD)),
-    new THREE.LineBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.35 }),
+  const ground = new THREE.Mesh(
+    groundGeom,
+    new THREE.MeshBasicMaterial({
+      map: showPhoto ? tex : null,
+      color: showPhoto ? 0xffffff : 0x071016,
+      transparent: false,
+      opacity: showPhoto ? 1 : 0.08,
+      side: THREE.DoubleSide,
+      depthWrite: true,
+    }),
   );
-  rim.rotation.x = -Math.PI / 2;
-  rim.position.y = 0.03;
+  if (groundGeom instanceof THREE.PlaneGeometry) ground.rotation.x = -Math.PI / 2;
+  group.add(ground);
+
+  const circuit = new THREE.GridHelper(Math.max(worldW, worldD), 48, 0x14505c, 0x0b1c24);
+  circuit.position.y = 0.03;
+  circuit.visible = params.showGrid === true;
+  group.add(circuit);
+
+  const rim = new THREE.LineSegments(
+    new THREE.BufferGeometry().setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(
+        (() => {
+          const a = imageToWorld(0, 0, reconstruction.width, reconstruction.height, mpp);
+          const b = imageToWorld(reconstruction.width, 0, reconstruction.width, reconstruction.height, mpp);
+          const c = imageToWorld(reconstruction.width, reconstruction.height, reconstruction.width, reconstruction.height, mpp);
+          const d = imageToWorld(0, reconstruction.height, reconstruction.width, reconstruction.height, mpp);
+          return [a.x, 0.04, a.z, b.x, 0.04, b.z, b.x, 0.04, b.z, c.x, 0.04, c.z, c.x, 0.04, c.z, d.x, 0.04, d.z, d.x, 0.04, d.z, a.x, 0.04, a.z];
+        })(),
+        3,
+      ),
+    ),
+    new THREE.LineBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: neon ? 0.45 : 0.22 }),
+  );
   group.add(rim);
 
+  if (style === "hologram") {
+    const scan = new THREE.Mesh(
+      new THREE.PlaneGeometry(worldW, worldD),
+      new THREE.MeshBasicMaterial({
+        color: 0x00e5ff,
+        transparent: true,
+        opacity: 0.05,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      }),
+    );
+    scan.rotation.x = -Math.PI / 2;
+    scan.name = "scan";
+    scan.userData.maxY = Math.max(18, ...reconstruction.buildings.map((b) => b.height * mpp * 1.45));
+    group.add(scan);
+  }
+
+  group.userData.photoTexture = tex;
   return group;
 }
 
-export { CYAN, LIME, AMBER, imageToWorld };
+export function pickBuildingAt(pickables, camera, ndc) {
+  if (!pickables?.length) return null;
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(ndc, camera);
+  const hits = raycaster.intersectObjects(pickables, false);
+  return hits[0]?.object || null;
+}

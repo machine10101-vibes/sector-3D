@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  base: '/sector-3D/',
+  base: process.env.GITHUB_ACTIONS ? "/sector-3D/" : "/",
   server: {
     host: true,
     port: 5173,
