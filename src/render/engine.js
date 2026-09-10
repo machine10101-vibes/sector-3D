@@ -15,8 +15,8 @@ export class Viewport {
   constructor(container) {
     this.container = container;
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color("#b8c6d4");
-    this.scene.fog = new THREE.FogExp2("#c3d0dc", 0.0002);
+    this.scene.background = new THREE.Color("#a9bdd0");
+    this.scene.fog = new THREE.FogExp2("#c5d2df", 0.00012);
 
     this.persp = new THREE.PerspectiveCamera(42, 1, 0.1, 8000);
     this.persp.position.set(86, 92, 110);
@@ -24,7 +24,7 @@ export class Viewport {
     this.camera = this.persp;
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: false });
-    this.renderer.setClearColor("#b8c6d4", 1);
+    this.renderer.setClearColor("#a9bdd0", 1);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.NoToneMapping;
@@ -141,8 +141,8 @@ export class Viewport {
     const geo = new THREE.SphereGeometry(4200, 32, 16);
     const pos = geo.attributes.position;
     const colors = new Float32Array(pos.count * 3);
-    const zenith = new THREE.Color("#5b8ec8");
-    const horizon = new THREE.Color("#d7d2c4");
+    const zenith = new THREE.Color("#4f86c4");
+    const horizon = new THREE.Color("#cdd6e0");
     const nadir = new THREE.Color("#1a2228");
     const tmp = new THREE.Color();
     for (let i = 0; i < pos.count; i++) {
@@ -205,10 +205,10 @@ export class Viewport {
     this._sunDisc.position.copy(this._sun.position);
     this._sunDisc.scale.setScalar(span * 0.028);
     this.scene.environment = photo ? this._env : null;
-    this.scene.background = new THREE.Color(photo ? "#b8c6d4" : "#05070a");
-    this.renderer.setClearColor(photo ? "#b8c6d4" : "#05070a", 1);
+    this.scene.background = new THREE.Color(photo ? "#a9bdd0" : "#05070a");
+    this.renderer.setClearColor(photo ? "#a9bdd0" : "#05070a", 1);
     if (this.scene.fog) {
-      this.scene.fog.color.set(photo ? "#c3d0dc" : "#05070a");
+      this.scene.fog.color.set(photo ? "#c5d2df" : "#05070a");
       if ("density" in this.scene.fog) this.scene.fog.density = photo ? 0.22 / Math.max(500, span) : 0.0008;
     }
     const d = span * 0.72;
@@ -299,7 +299,7 @@ export class Viewport {
     this._viewKind = "iso";
     this._useCamera(this.persp);
     this.flyTo(
-      new THREE.Vector3(span * 0.62, span * 0.48, span * 0.68),
+      new THREE.Vector3(span * 0.62, span * 0.55, span * 0.68),
       new THREE.Vector3(0, span * 0.04, 0),
     );
     this.resize();
@@ -324,9 +324,9 @@ export class Viewport {
     } else {
       this._useCamera(this.persp);
       if (kind === "street") {
-        this.flyTo(new THREE.Vector3(span * 0.03, span * 0.028, span * 0.26), new THREE.Vector3(0, span * 0.03, 0));
+        this.flyTo(new THREE.Vector3(span * 0.12, span * 0.07, span * 0.4), new THREE.Vector3(0, span * 0.035, 0));
       } else {
-        this.flyTo(new THREE.Vector3(span * 0.62, span * 0.48, span * 0.68), new THREE.Vector3(0, span * 0.04, 0));
+        this.flyTo(new THREE.Vector3(span * 0.62, span * 0.55, span * 0.68), new THREE.Vector3(0, span * 0.04, 0));
       }
     }
   }

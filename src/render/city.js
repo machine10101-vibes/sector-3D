@@ -228,7 +228,7 @@ function addBuilding(group, building, width, height, metersPerPixel, style, phot
     setUpNormals(roofGeom);
     const roofMat = new THREE.MeshBasicMaterial({
       map: photoTex,
-      side: THREE.DoubleSide,
+      side: THREE.FrontSide,
       polygonOffset: true,
       polygonOffsetFactor: -1,
       polygonOffsetUnits: -1,
