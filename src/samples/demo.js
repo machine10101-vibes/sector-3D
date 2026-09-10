@@ -26,11 +26,37 @@ function fillNoise(ctx, w, h, rng, alpha = 0.08) {
   ctx.restore();
 }
 
+export const HARBOR_SIZE = 1024;
+export const HARBOR_BLOCKS = [
+  { x: 70, y: 40, w: 130, d: 90, h: 18, roof: "#c9c3b8" },
+  { x: 70, y: 230, w: 90, d: 70, h: 12, roof: "#d8d2c4" },
+  { x: 175, y: 250, w: 40, d: 110, h: 22, roof: "#b9b3a8" },
+  { x: 280, y: 40, w: 70, d: 110, h: 36, roof: "#d0cfc8" },
+  { x: 370, y: 30, w: 90, d: 70, h: 48, roof: "#e8e6df" },
+  { x: 480, y: 40, w: 55, d: 120, h: 62, roof: "#f2f0ea" },
+  { x: 555, y: 50, w: 80, d: 80, h: 44, roof: "#cdc8be" },
+  { x: 280, y: 230, w: 160, d: 120, h: 28, roof: "#c2b8a8" },
+  { x: 470, y: 220, w: 90, d: 70, h: 16, roof: "#d4cbb8" },
+  { x: 580, y: 250, w: 100, d: 140, h: 20, roof: "#bbb4a6" },
+  { x: 780, y: 40, w: 180, d: 110, h: 14, roof: "#9aa7a2" },
+  { x: 780, y: 230, w: 70, d: 160, h: 40, roof: "#e4e1d8" },
+  { x: 870, y: 240, w: 90, d: 80, h: 54, roof: "#f4f2ec" },
+  { x: 60, y: 670, w: 140, d: 100, h: 10, roof: "#d5e04a" },
+  { x: 70, y: 790, w: 90, d: 70, h: 8, roof: "#c8d63a" },
+  { x: 280, y: 670, w: 80, d: 200, h: 32, roof: "#d9d4c8" },
+  { x: 390, y: 680, w: 70, d: 90, h: 46, roof: "#eeeae2" },
+  { x: 480, y: 670, w: 110, d: 140, h: 24, roof: "#cfc8ba" },
+  { x: 620, y: 690, w: 60, d: 180, h: 58, roof: "#f7f4ee" },
+  { x: 760, y: 670, w: 190, d: 90, h: 18, roof: "#b7c0bc" },
+  { x: 780, y: 790, w: 80, d: 120, h: 34, roof: "#ddd8ce" },
+  { x: 880, y: 800, w: 90, d: 70, h: 12, roof: "#d2c9a8" },
+];
+
 /**
  * Synthetic nadir city whose footprints are known — used to prove reconstruction fidelity.
  */
 export function generateHarborDistrict() {
-  const size = 1024;
+  const size = HARBOR_SIZE;
   const { canvas, ctx } = createCanvas(size, size);
   const rng = rand(0x5ec70d);
 
@@ -66,30 +92,7 @@ export function generateHarborDistrict() {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  const blocks = [
-    { x: 70, y: 40, w: 130, d: 90, h: 18, roof: "#c9c3b8" },
-    { x: 70, y: 230, w: 90, d: 70, h: 12, roof: "#d8d2c4" },
-    { x: 175, y: 250, w: 40, d: 110, h: 22, roof: "#b9b3a8" },
-    { x: 280, y: 40, w: 70, d: 110, h: 36, roof: "#d0cfc8" },
-    { x: 370, y: 30, w: 90, d: 70, h: 48, roof: "#e8e6df" },
-    { x: 480, y: 40, w: 55, d: 120, h: 62, roof: "#f2f0ea" },
-    { x: 555, y: 50, w: 80, d: 80, h: 44, roof: "#cdc8be" },
-    { x: 280, y: 230, w: 160, d: 120, h: 28, roof: "#c2b8a8" },
-    { x: 470, y: 220, w: 90, d: 70, h: 16, roof: "#d4cbb8" },
-    { x: 580, y: 250, w: 100, d: 140, h: 20, roof: "#bbb4a6" },
-    { x: 780, y: 40, w: 180, d: 110, h: 14, roof: "#9aa7a2" },
-    { x: 780, y: 230, w: 70, d: 160, h: 40, roof: "#e4e1d8" },
-    { x: 870, y: 240, w: 90, d: 80, h: 54, roof: "#f4f2ec" },
-    { x: 60, y: 670, w: 140, d: 100, h: 10, roof: "#d5e04a" },
-    { x: 70, y: 790, w: 90, d: 70, h: 8, roof: "#c8d63a" },
-    { x: 280, y: 670, w: 80, d: 200, h: 32, roof: "#d9d4c8" },
-    { x: 390, y: 680, w: 70, d: 90, h: 46, roof: "#eeeae2" },
-    { x: 480, y: 670, w: 110, d: 140, h: 24, roof: "#cfc8ba" },
-    { x: 620, y: 690, w: 60, d: 180, h: 58, roof: "#f7f4ee" },
-    { x: 760, y: 670, w: 190, d: 90, h: 18, roof: "#b7c0bc" },
-    { x: 780, y: 790, w: 80, d: 120, h: 34, roof: "#ddd8ce" },
-    { x: 880, y: 800, w: 90, d: 70, h: 12, roof: "#d2c9a8" },
-  ];
+  const blocks = HARBOR_BLOCKS;
 
   const sun = { x: 0.55, y: 0.85 };
   for (const b of blocks) {
