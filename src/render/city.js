@@ -60,6 +60,9 @@ function addBuilding(group, building, width, height, metersPerPixel, style, phot
   const roofY = Math.max(2.4, building.height * metersPerPixel * 1.45);
   const accent = accentFor(building);
   const neon = neonLines(style);
+  const roofCol = building.roofColor
+    ? new THREE.Color(building.roofColor.r / 255, building.roofColor.g / 255, building.roofColor.b / 255)
+    : new THREE.Color("#c8c2b6");
   const toV = (p, y) => {
     const w = imageToWorld(p.x, p.y, width, height, metersPerPixel);
     return new THREE.Vector3(w.x, y, w.z);
@@ -70,7 +73,6 @@ function addBuilding(group, building, width, height, metersPerPixel, style, phot
   };
 
   const sidePos = [];
-  const sideUv = [];
   const sideCol = [];
   const roofPos = [];
   const roofUv = [];
@@ -99,17 +101,24 @@ function addBuilding(group, building, width, height, metersPerPixel, style, phot
     const b1 = toV(p1, 0);
     const t0 = toV(p0, roofY);
     const t1 = toV(p1, roofY);
-    const u0 = toUV(p0);
-    const u1 = toUV(p1);
-    const base = 0.34;
+    const base = 0.42;
     const top = 1;
-    const push = (a, b, c, ua, ub, uc, sa, sb, sc) => {
+    const push = (a, b, c, sa, sb, sc) => {
       sidePos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
-      sideUv.push(ua[0], ua[1], ub[0], ub[1], uc[0], uc[1]);
-      sideCol.push(sa, sa, sa, sb, sb, sb, sc, sc, sc);
+      sideCol.push(
+        roofCol.r * sa,
+        roofCol.g * sa,
+        roofCol.b * sa,
+        roofCol.r * sb,
+        roofCol.g * sb,
+        roofCol.b * sb,
+        roofCol.r * sc,
+        roofCol.g * sc,
+        roofCol.b * sc,
+      );
     };
-    push(b0, b1, t1, u0, u1, u1, base, base, top);
-    push(b0, t1, t0, u0, u1, u0, base, top, top);
+    push(b0, b1, t1, base, base, top);
+    push(b0, t1, t0, base, top, top);
     linePos.push(b0.x, 0, b0.z, t0.x, roofY, t0.z);
     linePos.push(b0.x, 0, b0.z, b1.x, 0, b1.z);
   }
@@ -123,13 +132,11 @@ function addBuilding(group, building, width, height, metersPerPixel, style, phot
 
   const sideGeom = new THREE.BufferGeometry();
   sideGeom.setAttribute("position", new THREE.Float32BufferAttribute(sidePos, 3));
-  sideGeom.setAttribute("uv", new THREE.Float32BufferAttribute(sideUv, 2));
   sideGeom.setAttribute("color", new THREE.Float32BufferAttribute(sideCol, 3));
   sideGeom.computeVertexNormals();
   const sideMesh = new THREE.Mesh(
     sideGeom,
     new THREE.MeshBasicMaterial({
-      map: photoTex,
       vertexColors: true,
       transparent: false,
       opacity: 1,
