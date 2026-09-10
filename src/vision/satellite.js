@@ -110,13 +110,16 @@ function boundsRing(c) {
 
 function toBuilding(imageData, luma, shadow, mean, width, height, c, params) {
   let ring = uniqueRing(c.contour);
-  ring = simplifyRdp(ring, params.simplify);
-  ring = orthogonalize(ring, 12);
-  ring = uniqueRing(ring);
+  const raw = ensureCCW(ring);
+  const rawArea = Math.abs(polygonArea(raw)) || c.area;
+  ring = uniqueRing(simplifyRdp(ring, Math.max(0.55, params.simplify * 0.75)));
+  const snapped = uniqueRing(orthogonalize(ring, 8));
+  const snapArea = Math.abs(polygonArea(ensureCCW(snapped)));
+  if (snapped.length >= 4 && snapArea > rawArea * 0.82 && snapArea < rawArea * 1.18) ring = snapped;
   if (ring.length < 3) ring = boundsRing(c);
   ring = ensureCCW(ring);
   let area = Math.abs(polygonArea(ring)) || c.area;
-  if (area < c.area * 0.45) {
+  if (area < c.area * 0.55 || area > c.area * 1.35) {
     ring = ensureCCW(boundsRing(c));
     area = Math.abs(polygonArea(ring)) || c.area;
   }

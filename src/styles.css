@@ -417,7 +417,7 @@ input[type="range"] {
     transparent 3px
   );
   mix-blend-mode: overlay;
-  opacity: 0.35;
+  opacity: 0.12;
 }
 
 .hud-corners span {

@@ -16,17 +16,19 @@ export class Viewport {
     this.container = container;
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color("#05070a");
-    this.scene.fog = new THREE.FogExp2("#05070a", 0.00115);
+    this.scene.fog = null;
 
-    this.camera = new THREE.PerspectiveCamera(38, 1, 0.1, 8000);
-    this.camera.position.set(86, 92, 110);
+    this.persp = new THREE.PerspectiveCamera(42, 1, 0.1, 8000);
+    this.persp.position.set(86, 92, 110);
+    this.ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 8000);
+    this.camera = this.persp;
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: false });
     this.renderer.setClearColor("#05070a", 1);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.12;
+    this.renderer.toneMapping = THREE.NoToneMapping;
+    this.renderer.toneMappingExposure = 1;
     this.renderer.domElement.style.display = "block";
     this.renderer.domElement.style.width = "100%";
     this.renderer.domElement.style.height = "100%";
@@ -60,7 +62,8 @@ export class Viewport {
 
     this.composer = null;
     this.bloomPass = null;
-    this.useBloom = true;
+    this._renderPass = null;
+    this.useBloom = false;
     this._running = true;
     this._clock = new THREE.Clock();
     this._softwareGL = this._detectSoftwareGL();
@@ -70,6 +73,8 @@ export class Viewport {
     this._selected = null;
     this._onPick = null;
     this._scan = null;
+    this._viewKind = "iso";
+    this._span = 200;
 
     this._ndc = new THREE.Vector2();
     this.renderer.domElement.addEventListener("pointermove", (e) => this._onPointer(e, false));
@@ -112,8 +117,9 @@ export class Viewport {
     const size = new THREE.Vector2();
     this.renderer.getSize(size);
     this.composer = new EffectComposer(this.renderer);
-    this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.85, 0.48, 0.16);
+    this._renderPass = new RenderPass(this.scene, this.camera);
+    this.composer.addPass(this._renderPass);
+    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.55, 0.4, 0.22);
     this.composer.addPass(this.bloomPass);
     this.composer.addPass(new OutputPass());
   }
@@ -121,10 +127,27 @@ export class Viewport {
   resize() {
     const w = Math.max(1, this.container.clientWidth);
     const h = Math.max(1, this.container.clientHeight);
-    this.camera.aspect = w / h;
-    this.camera.updateProjectionMatrix();
+    const aspect = w / h;
+    this.persp.aspect = aspect;
+    this.persp.updateProjectionMatrix();
+    this._fitOrtho(this._span, aspect);
     this.renderer.setSize(w, h);
     this.composer?.setSize(w, h);
+  }
+
+  _fitOrtho(span, aspect = this.persp.aspect) {
+    const half = Math.max(8, span * 0.52);
+    this.ortho.left = -half * aspect;
+    this.ortho.right = half * aspect;
+    this.ortho.top = half;
+    this.ortho.bottom = -half;
+    this.ortho.updateProjectionMatrix();
+  }
+
+  _useCamera(cam) {
+    this.camera = cam;
+    this.controls.object = cam;
+    if (this._renderPass) this._renderPass.camera = cam;
   }
 
   setBloom(on) {
@@ -132,8 +155,22 @@ export class Viewport {
     if (this.bloomPass) this.bloomPass.enabled = this.useBloom;
   }
 
-  setScene(reconstruction, params, style) {
+  _disposeWorld() {
+    const maps = new Set();
+    this.world.traverse((obj) => {
+      obj.geometry?.dispose?.();
+      const mats = obj.material ? [].concat(obj.material) : [];
+      for (const m of mats) {
+        if (m.map) maps.add(m.map);
+        m.dispose?.();
+      }
+    });
+    for (const map of maps) map.dispose();
     this.world.clear();
+  }
+
+  setScene(reconstruction, params, style) {
+    this._disposeWorld();
     this._pickables = [];
     this._hover = null;
     this._selected = null;
@@ -142,15 +179,19 @@ export class Viewport {
     this.resize();
     const ground = buildGround(reconstruction, params, style);
     this.world.add(ground);
-    const roofTex = ground.children.find((c) => c.material?.map)?.material?.map;
-    const city = buildCityGroup(reconstruction, params, style, roofTex);
+    const photoTex = ground.userData.photoTexture;
+    if (photoTex) photoTex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+    const city = buildCityGroup(reconstruction, params, style, photoTex);
     this.world.add(city);
     this._pickables = city.userData.pickables || [];
     this._scan = this.world.getObjectByName("scan");
     const span = Math.max(reconstruction.width, reconstruction.height) * params.metersPerPixel;
+    this._span = span;
+    this._viewKind = "iso";
+    this._useCamera(this.persp);
     this.flyTo(
-      new THREE.Vector3(span * 0.58, span * 0.52, span * 0.72),
-      new THREE.Vector3(0, span * 0.07, 0),
+      new THREE.Vector3(span * 0.62, span * 0.48, span * 0.68),
+      new THREE.Vector3(0, span * 0.04, 0),
     );
     this.resize();
   }
@@ -158,12 +199,26 @@ export class Viewport {
   setView(kind, reconstruction, params) {
     if (!reconstruction) return;
     const span = Math.max(reconstruction.width, reconstruction.height) * params.metersPerPixel;
+    this._span = span;
+    this._viewKind = kind === "top" ? "top" : kind;
     if (kind === "top") {
-      this.flyTo(new THREE.Vector3(0.02, span * 1.18, 0.02), new THREE.Vector3(0, 0, 0));
-    } else if (kind === "street") {
-      this.flyTo(new THREE.Vector3(span * 0.04, span * 0.11, span * 0.52), new THREE.Vector3(0, span * 0.06, 0));
+      this._camAnim = null;
+      this.ortho.zoom = 1;
+      this._fitOrtho(span);
+      this.ortho.position.set(0, span * 1.6, 0);
+      this.ortho.up.set(0, 0, -1);
+      this.ortho.lookAt(0, 0, 0);
+      this.ortho.updateProjectionMatrix();
+      this._useCamera(this.ortho);
+      this.controls.target.set(0, 0, 0);
+      this.controls.update();
     } else {
-      this.flyTo(new THREE.Vector3(span * 0.58, span * 0.52, span * 0.72), new THREE.Vector3(0, span * 0.07, 0));
+      this._useCamera(this.persp);
+      if (kind === "street") {
+        this.flyTo(new THREE.Vector3(span * 0.02, span * 0.09, span * 0.48), new THREE.Vector3(0, span * 0.05, 0));
+      } else {
+        this.flyTo(new THREE.Vector3(span * 0.62, span * 0.48, span * 0.68), new THREE.Vector3(0, span * 0.04, 0));
+      }
     }
   }
 

@@ -8,7 +8,7 @@ const $ = (id) => document.getElementById(id);
 
 const state = {
   sourceType: "auto",
-  style: "hologram",
+  style: "photo",
   image: null,
   imageName: null,
   reconstruction: null,

@@ -7,7 +7,7 @@ export function defaultParams() {
   return {
     sensitivity: 0.68,
     minArea: 70,
-    simplify: 1.8,
+    simplify: 1,
     heightScale: 1,
     wallHeight: 14,
     sunFactor: 0.85,
@@ -21,7 +21,7 @@ export async function reconstructFromImage(image, sourceType, params, onProgress
   const report = (label, t) => onProgress?.({ label, t });
   report("Normalizing raster", 0.08);
   await Promise.resolve();
-  const raster = drawImageContain(image, 1280);
+  const raster = drawImageContain(image, 1920);
   const mode = sourceType === "auto" ? inferSourceType(raster.imageData) : sourceType;
   report(mode === "blueprint" ? "Tracing enclosed masses" : "Locking roofs to source pixels", 0.35);
   await Promise.resolve();
