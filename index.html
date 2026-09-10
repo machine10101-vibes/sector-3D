@@ -11,8 +11,8 @@
       href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap"
       rel="stylesheet"
     />
-    <script type="module" crossorigin src="/sector-3D/assets/index-7B2OLnuX.js"></script>
-    <link rel="stylesheet" crossorigin href="/sector-3D/assets/index-B7wlObwF.css">
+    <script type="module" crossorigin src="/sector-3D/assets/index-CYD3MOLN.js"></script>
+    <link rel="stylesheet" crossorigin href="/sector-3D/assets/index-Cvjr-YMI.css">
   </head>
   <body>
     <div class="boot" id="boot">
@@ -62,8 +62,8 @@
             <input id="minArea" type="range" min="24" max="400" step="2" value="70" />
           </div>
           <div class="field">
-            <label>Simplify <span id="v-simp">1.8</span></label>
-            <input id="simplify" type="range" min="0.6" max="8" step="0.1" value="1.8" />
+            <label>Simplify <span id="v-simp">1.0</span></label>
+            <input id="simplify" type="range" min="0.6" max="8" step="0.1" value="1" />
           </div>
           <div class="field">
             <label>Height scale <span id="v-h">1.00</span></label>
@@ -83,7 +83,7 @@
 
         <section class="viewport-wrap" id="stage">
           <div class="view-switch">
-            <button class="chip active" data-view="3d" type="button"><span class="full">3D hologram</span><span class="short">3D</span></button>
+            <button class="chip active" data-view="3d" type="button"><span class="full">3D map</span><span class="short">3D</span></button>
             <button class="chip" data-view="source" type="button"><span class="full">Source lock</span><span class="short">Lock</span></button>
             <button class="chip" data-view="split" type="button">Split</button>
           </div>
@@ -121,14 +121,15 @@
           </div>
           <h2>Presentation</h2>
           <div class="segmented" id="style">
-            <button type="button" data-style="hologram" class="active">Hologram</button>
+            <button type="button" data-style="photo" class="active">Photo lock</button>
             <button type="button" data-style="hybrid">Hybrid</button>
+            <button type="button" data-style="hologram">Hologram</button>
           </div>
           <div class="toggles">
-            <label class="toggle">Bloom<input id="bloom" type="checkbox" checked /></label>
+            <label class="toggle">Bloom<input id="bloom" type="checkbox" /></label>
             <label class="toggle">Ground texture<input id="groundTex" type="checkbox" checked /></label>
-            <label class="toggle">Grid<input id="grid" type="checkbox" checked /></label>
-            <label class="toggle">Activity nodes<input id="lights" type="checkbox" checked /></label>
+            <label class="toggle">Grid<input id="grid" type="checkbox" /></label>
+            <label class="toggle">Activity nodes<input id="lights" type="checkbox" /></label>
             <label class="toggle">Auto orbit<input id="orbit" type="checkbox" /></label>
             <label class="toggle">Live rebuild<input id="live" type="checkbox" checked /></label>
           </div>
