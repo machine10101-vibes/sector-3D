@@ -15,8 +15,8 @@ export class Viewport {
   constructor(container) {
     this.container = container;
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color("#05070a");
-    this.scene.fog = null;
+    this.scene.background = new THREE.Color("#9aa8b8");
+    this.scene.fog = new THREE.Fog("#9aa8b8", 1800, 5200);
 
     this.persp = new THREE.PerspectiveCamera(42, 1, 0.1, 8000);
     this.persp.position.set(86, 92, 110);
@@ -24,11 +24,13 @@ export class Viewport {
     this.camera = this.persp;
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: false });
-    this.renderer.setClearColor("#05070a", 1);
+    this.renderer.setClearColor("#9aa8b8", 1);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.toneMapping = THREE.NoToneMapping;
-    this.renderer.toneMappingExposure = 1;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.domElement.style.display = "block";
     this.renderer.domElement.style.width = "100%";
     this.renderer.domElement.style.height = "100%";
@@ -37,7 +39,7 @@ export class Viewport {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.07;
-    this.controls.maxPolarAngle = Math.PI * 0.495;
+    this.controls.maxPolarAngle = Math.PI * 0.499;
     this.controls.minDistance = 8;
     this.controls.maxDistance = 2400;
     this.controls.target.set(0, 8, 0);
@@ -49,13 +51,22 @@ export class Viewport {
       this.controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
     }
 
-    this.scene.add(new THREE.AmbientLight(0x8ce8f4, 0.5));
-    const key = new THREE.DirectionalLight(0x00e5ff, 1.55);
-    key.position.set(50, 90, 28);
-    this.scene.add(key);
-    const fill = new THREE.DirectionalLight(0xd4ff00, 0.28);
-    fill.position.set(-60, 40, -30);
-    this.scene.add(fill);
+    this.scene.add(new THREE.HemisphereLight(0xc8d7e8, 0x3a4038, 0.72));
+    this._sun = new THREE.DirectionalLight(0xfff2d8, 1.55);
+    this._sun.position.set(-80, 140, -60);
+    this._sun.castShadow = true;
+    this._sun.shadow.mapSize.set(2048, 2048);
+    this._sun.shadow.bias = -0.0007;
+    this._sun.shadow.normalBias = 0.045;
+    this._sun.shadow.camera.near = 1;
+    this._sun.shadow.camera.far = 4000;
+    this.scene.add(this._sun);
+    this.scene.add(this._sun.target);
+    this._fill = new THREE.DirectionalLight(0x8fb4d4, 0.28);
+    this._fill.position.set(70, 40, 50);
+    this.scene.add(this._fill);
+    this._sky = this._makeSky();
+    this.scene.add(this._sky);
 
     this.world = new THREE.Group();
     this.scene.add(this.world);
@@ -84,6 +95,11 @@ export class Viewport {
     window.addEventListener("resize", this._onResize);
     this._ro = new ResizeObserver(() => this.resize());
     this._ro.observe(container);
+    if (this._softwareGL) {
+      this.useBloom = false;
+      this.renderer.shadowMap.enabled = false;
+      this._sun.castShadow = false;
+    }
     this.resize();
     if (!this._softwareGL) this._buildComposer();
     else this.useBloom = false;
@@ -110,6 +126,53 @@ export class Viewport {
       return /llvmpipe|swiftshader|softpipe|microsoft basic/i.test(name);
     } catch {
       return false;
+    }
+  }
+
+  _makeSky() {
+    const geo = new THREE.SphereGeometry(4200, 32, 16);
+    const pos = geo.attributes.position;
+    const colors = new Float32Array(pos.count * 3);
+    const zenith = new THREE.Color("#8ea9c4");
+    const horizon = new THREE.Color("#d7cbb8");
+    const nadir = new THREE.Color("#1c2228");
+    const tmp = new THREE.Color();
+    for (let i = 0; i < pos.count; i++) {
+      const y = pos.getY(i) / 4200;
+      if (y >= 0) tmp.copy(horizon).lerp(zenith, Math.pow(y, 0.65));
+      else tmp.copy(horizon).lerp(nadir, Math.min(1, -y * 1.4));
+      colors[i * 3] = tmp.r;
+      colors[i * 3 + 1] = tmp.g;
+      colors[i * 3 + 2] = tmp.b;
+    }
+    geo.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+    return new THREE.Mesh(
+      geo,
+      new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, depthWrite: false, fog: false }),
+    );
+  }
+
+  _fitSun(span, style) {
+    const photo = style !== "hologram";
+    this._sun.position.set(-span * 0.52, span * 0.9, -span * 0.38);
+    this._sun.target.position.set(0, 0, 0);
+    this._sun.intensity = photo ? 1.55 : 1.15;
+    this._fill.intensity = photo ? 0.28 : 0.18;
+    this._sun.castShadow = photo && !this._softwareGL && this.renderer.shadowMap.enabled;
+    this._sky.visible = photo;
+    this.scene.background = new THREE.Color(photo ? "#9aa8b8" : "#05070a");
+    this.renderer.setClearColor(photo ? "#9aa8b8" : "#05070a", 1);
+    if (this.scene.fog) this.scene.fog.color.set(photo ? "#9aa8b8" : "#05070a");
+    const d = span * 0.72;
+    this._sun.shadow.camera.left = -d;
+    this._sun.shadow.camera.right = d;
+    this._sun.shadow.camera.top = d;
+    this._sun.shadow.camera.bottom = -d;
+    this._sun.shadow.camera.far = span * 2.8;
+    this._sun.shadow.camera.updateProjectionMatrix();
+    if (this.scene.fog) {
+      this.scene.fog.near = span * 1.55;
+      this.scene.fog.far = span * 3.6;
     }
   }
 
@@ -161,8 +224,8 @@ export class Viewport {
       obj.geometry?.dispose?.();
       const mats = obj.material ? [].concat(obj.material) : [];
       for (const m of mats) {
-        if (m.map) maps.add(m.map);
-        m.dispose?.();
+        if (m.map && !m.map.userData?.shared) maps.add(m.map);
+        if (!m.userData?.shared) m.dispose?.();
       }
     });
     for (const map of maps) map.dispose();
@@ -181,12 +244,14 @@ export class Viewport {
     this.world.add(ground);
     const photoTex = ground.userData.photoTexture;
     if (photoTex) photoTex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
-    const city = buildCityGroup(reconstruction, params, style, photoTex);
+    const shadows = params.showShadows !== false && style !== "hologram" && !this._softwareGL;
+    const city = buildCityGroup(reconstruction, params, style, photoTex, shadows);
     this.world.add(city);
     this._pickables = city.userData.pickables || [];
     this._scan = this.world.getObjectByName("scan");
     const span = Math.max(reconstruction.width, reconstruction.height) * params.metersPerPixel;
     this._span = span;
+    this._fitSun(span, style);
     this._viewKind = "iso";
     this._useCamera(this.persp);
     this.flyTo(
@@ -239,13 +304,20 @@ export class Viewport {
     this._ndc.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     const hit = pickBuildingAt(this._pickables, this.camera, this._ndc);
     if (this._hover && this._hover !== hit) {
-      this._hover.material.opacity = this._hover.userData.baseOpacity ?? this._hover.material.opacity;
+      const prev = this._hover.material;
+      if (prev.emissive) prev.emissive.setHex(this._hover.userData.baseEmissive ?? 0);
+      else prev.opacity = this._hover.userData.baseOpacity ?? prev.opacity;
     }
     this._hover = hit;
     this.renderer.domElement.style.cursor = hit ? "pointer" : "grab";
     if (hit) {
-      hit.userData.baseOpacity ??= hit.material.opacity;
-      if (hit !== this._selected) hit.material.opacity = Math.min(0.88, hit.userData.baseOpacity + 0.24);
+      if (hit.material.emissive) {
+        hit.userData.baseEmissive ??= hit.material.emissive.getHex();
+        if (hit !== this._selected) hit.material.emissive.setHex(0x2a2418);
+      } else {
+        hit.userData.baseOpacity ??= hit.material.opacity;
+        if (hit !== this._selected) hit.material.opacity = Math.min(1, hit.userData.baseOpacity + 0.08);
+      }
     }
     if (click) {
       this._selected = hit;

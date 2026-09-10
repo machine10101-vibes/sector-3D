@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { earclip, ensureCCW, polygonArea, polygonCentroid } from "../vision/geometry.js";
+import { facadeRepeats, facadeTexture, wallColorFromRoof } from "./facades.js";
 import { imageToUv, imageToWorld, worldSpan } from "./mapping.js";
 
 export const CYAN = new THREE.Color("#00e5ff");
@@ -43,6 +44,10 @@ function neonLines(style) {
   return style === "hologram" || style === "hybrid";
 }
 
+function isLit(style) {
+  return style !== "hologram";
+}
+
 function insetRing(ring, px) {
   const c = polygonCentroid(ring);
   return ring.map((p) => {
@@ -53,16 +58,26 @@ function insetRing(ring, px) {
   });
 }
 
-function addBuilding(group, building, width, height, metersPerPixel, style, photoTex) {
+function setUpNormals(geom) {
+  const n = geom.attributes.position.count;
+  const arr = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) arr[i * 3 + 1] = 1;
+  geom.setAttribute("normal", new THREE.Float32BufferAttribute(arr, 3));
+}
+
+function addBuilding(group, building, width, height, metersPerPixel, style, photoTex, shadows) {
   const { points, indices } = earclip(building.polygon);
   if (indices.length < 3 || points.length < 3) return [];
 
   const roofY = Math.max(2.4, building.height * metersPerPixel * 1.45);
   const accent = accentFor(building);
   const neon = neonLines(style);
+  const lit = isLit(style);
   const roofCol = building.roofColor
     ? new THREE.Color(building.roofColor.r / 255, building.roofColor.g / 255, building.roofColor.b / 255)
     : new THREE.Color("#c8c2b6");
+  const wallCol = wallColorFromRoof(roofCol);
+  const kind = building.className || "lowrise";
   const toV = (p, y) => {
     const w = imageToWorld(p.x, p.y, width, height, metersPerPixel);
     return new THREE.Vector3(w.x, y, w.z);
@@ -73,10 +88,12 @@ function addBuilding(group, building, width, height, metersPerPixel, style, phot
   };
 
   const sidePos = [];
+  const sideUv = [];
   const sideCol = [];
   const roofPos = [];
   const roofUv = [];
   const linePos = [];
+  const parapetPos = [];
 
   for (let i = 0; i < indices.length; i += 3) {
     const pa = points[indices[i]];
@@ -93,6 +110,7 @@ function addBuilding(group, building, width, height, metersPerPixel, style, phot
     linePos.push(a.x, a.y, a.z, b.x, b.y, b.z, b.x, b.y, b.z, c.x, c.y, c.z, c.x, c.y, c.z, a.x, a.y, a.z);
   }
 
+  const parapetH = Math.max(0.32, Math.min(0.85, roofY * 0.038));
   const n = points.length;
   for (let i = 0; i < n; i++) {
     const p0 = points[i];
@@ -101,24 +119,39 @@ function addBuilding(group, building, width, height, metersPerPixel, style, phot
     const b1 = toV(p1, 0);
     const t0 = toV(p0, roofY);
     const t1 = toV(p1, roofY);
-    const base = 0.42;
+    const edge = b0.distanceTo(b1);
+    const rep = facadeRepeats(edge, roofY, kind);
+    const u0 = 0;
+    const u1 = rep.u;
+    const v0 = 0;
+    const v1 = rep.v;
+    const base = 0.55;
     const top = 1;
-    const push = (a, b, c, sa, sb, sc) => {
+    const pushWall = (a, b, c, ua, va, ub, vb, uc, vc, sa, sb, sc) => {
       sidePos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+      sideUv.push(ua, va, ub, vb, uc, vc);
       sideCol.push(
-        roofCol.r * sa,
-        roofCol.g * sa,
-        roofCol.b * sa,
-        roofCol.r * sb,
-        roofCol.g * sb,
-        roofCol.b * sb,
-        roofCol.r * sc,
-        roofCol.g * sc,
-        roofCol.b * sc,
+        wallCol.r * sa,
+        wallCol.g * sa,
+        wallCol.b * sa,
+        wallCol.r * sb,
+        wallCol.g * sb,
+        wallCol.b * sb,
+        wallCol.r * sc,
+        wallCol.g * sc,
+        wallCol.b * sc,
       );
     };
-    push(b0, b1, t1, base, base, top);
-    push(b0, t1, t0, base, top, top);
+    // Outward-facing winding for a CCW footprint viewed from +Y.
+    pushWall(b0, t0, t1, u0, v0, u0, v1, u1, v1, base, top, top);
+    pushWall(b0, t1, b1, u0, v0, u1, v1, u1, v0, base, top, base);
+
+    const d0 = toV(p0, roofY + parapetH);
+    const d1 = toV(p1, roofY + parapetH);
+    const pushP = (a, b, c) => parapetPos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+    pushP(t0, d0, d1);
+    pushP(t0, d1, t1);
+
     linePos.push(b0.x, 0, b0.z, t0.x, roofY, t0.z);
     linePos.push(b0.x, 0, b0.z, b1.x, 0, b1.z);
   }
@@ -132,18 +165,25 @@ function addBuilding(group, building, width, height, metersPerPixel, style, phot
 
   const sideGeom = new THREE.BufferGeometry();
   sideGeom.setAttribute("position", new THREE.Float32BufferAttribute(sidePos, 3));
+  sideGeom.setAttribute("uv", new THREE.Float32BufferAttribute(sideUv, 2));
   sideGeom.setAttribute("color", new THREE.Float32BufferAttribute(sideCol, 3));
   sideGeom.computeVertexNormals();
-  const sideMesh = new THREE.Mesh(
-    sideGeom,
-    new THREE.MeshBasicMaterial({
-      vertexColors: true,
-      transparent: false,
-      opacity: 1,
-      side: THREE.DoubleSide,
-      depthWrite: true,
-    }),
-  );
+  const sideMat = lit
+    ? new THREE.MeshStandardMaterial({
+        map: facadeTexture(kind),
+        vertexColors: true,
+        roughness: 0.72,
+        metalness: 0.04,
+        side: THREE.FrontSide,
+      })
+    : new THREE.MeshBasicMaterial({
+        map: facadeTexture(kind),
+        vertexColors: true,
+        side: THREE.FrontSide,
+      });
+  const sideMesh = new THREE.Mesh(sideGeom, sideMat);
+  sideMesh.castShadow = !!shadows;
+  sideMesh.receiveShadow = !!shadows;
   sideMesh.userData = userData;
   group.add(sideMesh);
   pick.push(sideMesh);
@@ -152,42 +192,69 @@ function addBuilding(group, building, width, height, metersPerPixel, style, phot
     const roofGeom = new THREE.BufferGeometry();
     roofGeom.setAttribute("position", new THREE.Float32BufferAttribute(roofPos, 3));
     roofGeom.setAttribute("uv", new THREE.Float32BufferAttribute(roofUv, 2));
-    roofGeom.computeVertexNormals();
-    const roofMesh = new THREE.Mesh(
-      roofGeom,
-      new THREE.MeshBasicMaterial({
-        map: photoTex,
-        transparent: false,
-        opacity: 1,
-        side: THREE.DoubleSide,
-        depthWrite: true,
-        polygonOffset: true,
-        polygonOffsetFactor: -1,
-        polygonOffsetUnits: -1,
-      }),
-    );
+    setUpNormals(roofGeom);
+    const roofMat = lit
+      ? new THREE.MeshStandardMaterial({
+          map: photoTex,
+          roughness: 0.78,
+          metalness: 0.06,
+          side: THREE.DoubleSide,
+          polygonOffset: true,
+          polygonOffsetFactor: -1,
+          polygonOffsetUnits: -1,
+        })
+      : new THREE.MeshBasicMaterial({
+          map: photoTex,
+          side: THREE.DoubleSide,
+          polygonOffset: true,
+          polygonOffsetFactor: -1,
+          polygonOffsetUnits: -1,
+        });
+    const roofMesh = new THREE.Mesh(roofGeom, roofMat);
+    roofMesh.castShadow = !!shadows;
+    roofMesh.receiveShadow = !!shadows;
     roofMesh.userData = userData;
     group.add(roofMesh);
     pick.push(roofMesh);
   }
 
-  const lineGeom = new THREE.BufferGeometry();
-  lineGeom.setAttribute("position", new THREE.Float32BufferAttribute(linePos, 3));
-  group.add(
-    new THREE.LineSegments(
-      lineGeom,
-      new THREE.LineBasicMaterial({
-        color: neon ? accent : 0x11161c,
-        transparent: true,
-        opacity: neon ? (style === "hologram" ? 0.88 : 0.42) : 0.16,
+  if (parapetPos.length && lit) {
+    const paraGeom = new THREE.BufferGeometry();
+    paraGeom.setAttribute("position", new THREE.Float32BufferAttribute(parapetPos, 3));
+    paraGeom.computeVertexNormals();
+    const para = new THREE.Mesh(
+      paraGeom,
+      new THREE.MeshStandardMaterial({
+        color: wallCol.clone().multiplyScalar(0.82),
+        roughness: 0.8,
+        metalness: 0.04,
+        side: THREE.DoubleSide,
       }),
-    ),
-  );
+    );
+    para.castShadow = !!shadows;
+    para.userData = userData;
+    group.add(para);
+  }
+
+  if (neon || !lit) {
+    const lineGeom = new THREE.BufferGeometry();
+    lineGeom.setAttribute("position", new THREE.Float32BufferAttribute(linePos, 3));
+    group.add(
+      new THREE.LineSegments(
+        lineGeom,
+        new THREE.LineBasicMaterial({
+          color: neon ? accent : 0x11161c,
+          transparent: true,
+          opacity: neon ? (style === "hologram" ? 0.88 : 0.32) : 0.12,
+        }),
+      ),
+    );
+  }
 
   return pick;
 }
 
-export function buildCityGroup(reconstruction, params, style, photoTex) {
+export function buildCityGroup(reconstruction, params, style, photoTex, shadows = false) {
   const group = new THREE.Group();
   group.name = "city";
   const { width, height, buildings, lights } = reconstruction;
@@ -196,7 +263,7 @@ export function buildCityGroup(reconstruction, params, style, photoTex) {
   const tex = photoTex || sourceTexture(reconstruction.canvas);
 
   for (const b of buildings) {
-    const meshes = addBuilding(group, b, width, height, mpp, style, tex);
+    const meshes = addBuilding(group, b, width, height, mpp, style, tex, shadows);
     if (meshes?.length) pickables.push(...meshes);
   }
 
@@ -265,7 +332,7 @@ function buildPhotoGround(reconstruction, params) {
     pos.setXYZ(i, w.x, 0, w.z);
   }
   geom.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
-  geom.computeVertexNormals();
+  setUpNormals(geom);
   return geom;
 }
 
@@ -275,7 +342,9 @@ export function buildGround(reconstruction, params, style = "photo") {
   const { worldW, worldD } = worldSpan(reconstruction.width, reconstruction.height, mpp);
   const tex = sourceTexture(reconstruction.canvas);
   const neon = neonLines(style);
+  const lit = isLit(style);
   const showPhoto = params.showGroundTexture !== false;
+  const shadows = params.showShadows !== false && lit;
 
   let groundGeom;
   try {
@@ -304,20 +373,25 @@ export function buildGround(reconstruction, params, style = "photo") {
         2,
       ),
     );
+    setUpNormals(groundGeom);
   }
 
-  const ground = new THREE.Mesh(
-    groundGeom,
-    new THREE.MeshBasicMaterial({
-      map: showPhoto ? tex : null,
-      color: showPhoto ? 0xffffff : 0x071016,
-      transparent: false,
-      opacity: showPhoto ? 1 : 0.08,
-      side: THREE.DoubleSide,
-      depthWrite: true,
-    }),
-  );
+  const groundMat = lit
+    ? new THREE.MeshStandardMaterial({
+        map: showPhoto ? tex : null,
+        color: showPhoto ? 0xffffff : 0x071016,
+        roughness: 0.96,
+        metalness: 0,
+        side: THREE.DoubleSide,
+      })
+    : new THREE.MeshBasicMaterial({
+        map: showPhoto ? tex : null,
+        color: showPhoto ? 0xffffff : 0x071016,
+        side: THREE.DoubleSide,
+      });
+  const ground = new THREE.Mesh(groundGeom, groundMat);
   if (groundGeom instanceof THREE.PlaneGeometry) ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = shadows;
   group.add(ground);
 
   const circuit = new THREE.GridHelper(Math.max(worldW, worldD), 48, 0x14505c, 0x0b1c24);
@@ -339,7 +413,7 @@ export function buildGround(reconstruction, params, style = "photo") {
         3,
       ),
     ),
-    new THREE.LineBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: neon ? 0.45 : 0.22 }),
+    new THREE.LineBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: neon ? 0.45 : 0.12 }),
   );
   group.add(rim);
 

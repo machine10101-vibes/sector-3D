@@ -37,6 +37,7 @@ function readParams() {
   params.showGroundTexture = $("groundTex").checked;
   params.showGrid = $("grid").checked;
   params.showLights = $("lights").checked;
+  params.showShadows = $("shadows").checked;
   $("v-sens").textContent = params.sensitivity.toFixed(2);
   $("v-area").textContent = String(params.minArea);
   $("v-simp").textContent = params.simplify.toFixed(1);
@@ -207,7 +208,7 @@ document.querySelectorAll(".view-switch .chip").forEach((chip) => {
     scheduleLive();
   });
 });
-["bloom", "groundTex", "grid", "lights", "orbit"].forEach((id) => {
+["bloom", "groundTex", "grid", "lights", "orbit", "shadows"].forEach((id) => {
   $(id).addEventListener("change", () => {
     readParams();
     if (id === "orbit") viewport.autoRotate = $("orbit").checked;
