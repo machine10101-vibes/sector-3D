@@ -172,8 +172,10 @@ function addBuilding(group, building, width, height, metersPerPixel, style, phot
     ? new THREE.MeshStandardMaterial({
         map: facadeTexture(kind),
         vertexColors: true,
-        roughness: 0.72,
-        metalness: 0.04,
+        roughness: 0.68,
+        metalness: 0.03,
+        emissive: new THREE.Color("#1a1814"),
+        emissiveIntensity: 0.18,
         side: THREE.FrontSide,
       })
     : new THREE.MeshBasicMaterial({
@@ -193,23 +195,13 @@ function addBuilding(group, building, width, height, metersPerPixel, style, phot
     roofGeom.setAttribute("position", new THREE.Float32BufferAttribute(roofPos, 3));
     roofGeom.setAttribute("uv", new THREE.Float32BufferAttribute(roofUv, 2));
     setUpNormals(roofGeom);
-    const roofMat = lit
-      ? new THREE.MeshStandardMaterial({
-          map: photoTex,
-          roughness: 0.78,
-          metalness: 0.06,
-          side: THREE.DoubleSide,
-          polygonOffset: true,
-          polygonOffsetFactor: -1,
-          polygonOffsetUnits: -1,
-        })
-      : new THREE.MeshBasicMaterial({
-          map: photoTex,
-          side: THREE.DoubleSide,
-          polygonOffset: true,
-          polygonOffsetFactor: -1,
-          polygonOffsetUnits: -1,
-        });
+    const roofMat = new THREE.MeshBasicMaterial({
+      map: photoTex,
+      side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
+    });
     const roofMesh = new THREE.Mesh(roofGeom, roofMat);
     roofMesh.castShadow = !!shadows;
     roofMesh.receiveShadow = !!shadows;
@@ -336,15 +328,13 @@ function buildPhotoGround(reconstruction, params) {
   return geom;
 }
 
-export function buildGround(reconstruction, params, style = "photo") {
+export function buildGround(reconstruction, params, style = "photo", shadows = false) {
   const group = new THREE.Group();
   const mpp = params.metersPerPixel;
   const { worldW, worldD } = worldSpan(reconstruction.width, reconstruction.height, mpp);
   const tex = sourceTexture(reconstruction.canvas);
   const neon = neonLines(style);
-  const lit = isLit(style);
   const showPhoto = params.showGroundTexture !== false;
-  const shadows = params.showShadows !== false && lit;
 
   let groundGeom;
   try {
@@ -376,19 +366,11 @@ export function buildGround(reconstruction, params, style = "photo") {
     setUpNormals(groundGeom);
   }
 
-  const groundMat = lit
-    ? new THREE.MeshStandardMaterial({
-        map: showPhoto ? tex : null,
-        color: showPhoto ? 0xffffff : 0x071016,
-        roughness: 0.96,
-        metalness: 0,
-        side: THREE.DoubleSide,
-      })
-    : new THREE.MeshBasicMaterial({
-        map: showPhoto ? tex : null,
-        color: showPhoto ? 0xffffff : 0x071016,
-        side: THREE.DoubleSide,
-      });
+  const groundMat = new THREE.MeshBasicMaterial({
+    map: showPhoto ? tex : null,
+    color: showPhoto ? 0xffffff : 0x071016,
+    side: THREE.DoubleSide,
+  });
   const ground = new THREE.Mesh(groundGeom, groundMat);
   if (groundGeom instanceof THREE.PlaneGeometry) ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = shadows;

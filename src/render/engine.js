@@ -27,8 +27,8 @@ export class Viewport {
     this.renderer.setClearColor("#9aa8b8", 1);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMapping = THREE.NoToneMapping;
+    this.renderer.toneMappingExposure = 1;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.domElement.style.display = "block";
@@ -51,8 +51,8 @@ export class Viewport {
       this.controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
     }
 
-    this.scene.add(new THREE.HemisphereLight(0xc8d7e8, 0x3a4038, 0.72));
-    this._sun = new THREE.DirectionalLight(0xfff2d8, 1.55);
+    this.scene.add(new THREE.HemisphereLight(0xd7e4f2, 0x4a463c, 1.15));
+    this._sun = new THREE.DirectionalLight(0xfff2d8, 1.85);
     this._sun.position.set(-80, 140, -60);
     this._sun.castShadow = true;
     this._sun.shadow.mapSize.set(2048, 2048);
@@ -156,8 +156,8 @@ export class Viewport {
     const photo = style !== "hologram";
     this._sun.position.set(-span * 0.52, span * 0.9, -span * 0.38);
     this._sun.target.position.set(0, 0, 0);
-    this._sun.intensity = photo ? 1.55 : 1.15;
-    this._fill.intensity = photo ? 0.28 : 0.18;
+    this._sun.intensity = photo ? 1.85 : 1.15;
+    this._fill.intensity = photo ? 0.4 : 0.18;
     this._sun.castShadow = photo && !this._softwareGL && this.renderer.shadowMap.enabled;
     this._sky.visible = photo;
     this.scene.background = new THREE.Color(photo ? "#9aa8b8" : "#05070a");
@@ -240,11 +240,11 @@ export class Viewport {
     this._scan = null;
     if (!reconstruction) return;
     this.resize();
-    const ground = buildGround(reconstruction, params, style);
+    const shadows = params.showShadows !== false && style !== "hologram" && !this._softwareGL;
+    const ground = buildGround(reconstruction, params, style, shadows);
     this.world.add(ground);
     const photoTex = ground.userData.photoTexture;
     if (photoTex) photoTex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
-    const shadows = params.showShadows !== false && style !== "hologram" && !this._softwareGL;
     const city = buildCityGroup(reconstruction, params, style, photoTex, shadows);
     this.world.add(city);
     this._pickables = city.userData.pickables || [];
